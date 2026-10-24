@@ -114,7 +114,7 @@ A virtual person walks a loop, pauses, and walks again. This checks the page, no
 
 Transmitter MACs are saved in `tools/boards.json` (git-ignored). Label each board with its name.
 
-**4. Place them** as in [tools/layouts/demo-room.json](tools/layouts/demo-room.json): TX1 in one corner, TX2 in the opposite corner, receivers on the walls so the four links cross the room (the page draws the plan). Boards at about chest height, antennas unobstructed. Transmitters only need power (USB charger or power bank). Receivers each need a USB cable to the laptop (use a powered hub), unless you use relay mode (see [docs/serial-protocol.md](docs/serial-protocol.md)), where each transmitter forwards its receivers' lines and only the transmitters are cabled; then pass the transmitters' ports to `--port`. Relay mode is not yet tested on hardware. If your room or placement differs, measure it in feet from the top-left corner and edit the JSON.
+**4. Place them** as in [tools/layouts/demo-room.json](tools/layouts/demo-room.json): TX1 in one corner, TX2 in the opposite corner, receivers on the walls so the four links cross the room (the page draws the plan). Boards at about chest height, antennas unobstructed. Transmitters only need power (USB charger or power bank). Receivers each need a USB cable to the laptop (use a powered hub). If your room or placement differs, measure it in feet from the top-left corner and edit the JSON.
 
 **5. Run it**, one `--port` per receiver:
 

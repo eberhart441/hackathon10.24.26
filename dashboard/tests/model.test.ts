@@ -185,3 +185,39 @@ describe('scene model examples', () => {
     expect(s.crew).toBeNull();
   });
 });
+
+describe('phone view data', () => {
+  const msg = (ts: number, state: 'MOTION' | 'POSSIBLE', system: 'ALARM_ACTIVE' | 'IDLE' = 'ALARM_ACTIVE') => ({
+    type: 'room_states' as const,
+    ts,
+    system_state: system,
+    simulated: false,
+    rooms: [{ room_id: 'R1', state, confidence_band: 'high' as const, confidence_pct: 90, last_seen: ts, stale: false,
+      last_known_state: null, stale_age_s: null, calibrated: true, searched: false, annotation: null,
+      alarm_time_state: null, link_health: 'ok' }],
+    ranking: ['R1'],
+  });
+
+  it('history keeps the last five minutes of the incident and is wiped when it ends', () => {
+    let s = emptyStore();
+    for (let t = 0; t < 400; t++) s = applyMessage(s, msg(1000 + t, t < 200 ? 'MOTION' : 'POSSIBLE'), NOW);
+    const h = s.history.R1;
+    expect(h[h.length - 1][0] - h[0][0]).toBeLessThanOrEqual(300);
+    expect(h.at(-1)![1]).toBe('POSSIBLE');
+    s = applyMessage(s, msg(1400, 'POSSIBLE', 'IDLE'), NOW);
+    expect(s.history).toEqual({});
+  });
+
+  it('ordered lists every plan room in the hub ranking order, unranked rooms after', () => {
+    fc.assert(
+      fc.property(roomStatesArb, (rs) => {
+        const alarmRs = { ...rs, system_state: 'ALARM_ACTIVE' as const };
+        const m = buildSceneModel(PLAN, storeWith({ roomStates: alarmRs }), NOW);
+        expect(m.ordered.map((r) => r.id).sort()).toEqual(m.rooms.map((r) => r.id).sort());
+        const ranked = alarmRs.ranking.filter((id) => m.rooms.some((r) => r.id === id));
+        expect(m.ordered.slice(0, ranked.length).map((r) => r.id)).toEqual(ranked);
+      }),
+      RUNS,
+    );
+  });
+});

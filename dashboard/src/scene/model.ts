@@ -104,6 +104,7 @@ export interface SceneModel {
   simulated: boolean;
   rooms: RoomDescriptor[];
   list: ListItem[];
+  ordered: RoomDescriptor[]; // every plan room, in the hub's ranking order (unranked rooms last)
   allSearched: boolean;
   floors: FloorView[];
   crewChips: CrewChip[];
@@ -221,11 +222,21 @@ export function buildSceneModel(plan: Floorplan, store: StoreState, now: number)
     simulated: !!rs?.simulated,
     rooms,
     list,
+    ordered: orderByRanking(rooms, occupancyShown ? rs!.ranking : []),
     allSearched: list.length > 0 && list.every((l) => l.searched),
     floors,
     crewChips,
     nodes,
   };
+}
+
+// Server order is the only order (Kiro R8.2); rooms the hub did not rank keep plan order after it.
+function orderByRanking(rooms: RoomDescriptor[], ranking: string[]): RoomDescriptor[] {
+  const pos = new Map(ranking.map((id, i) => [id, i]));
+  return rooms
+    .map((r, i) => ({ r, key: pos.get(r.id) ?? ranking.length + i }))
+    .sort((a, b) => a.key - b.key)
+    .map((x) => x.r);
 }
 
 function confText(m: RoomStateMsg): string {

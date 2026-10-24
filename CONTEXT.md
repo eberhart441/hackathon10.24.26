@@ -184,6 +184,8 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - **Room 101 is 13 ft x 9 ft 4 in with a 32 in door.** `tools/dxf_to_floorplan.py` builds the dashboard floor plan from `floor plans/conference_room.dxf` with a `--height 9ft4in` override (the DXF is drawn 2 in too deep), and places the six boards from `firmware/tools/layouts/demo-room.json`.
 - **Live dashboard data:** `tools/live_hub.py` reads the receivers (or `--simulate-boards` / `--replay`) through `roomsense_hub` and a rule-based room state engine (`hub/room_engine.py`). There is no trained model yet; confidence is a heuristic and must be described that way. Rooms are matched by the floor plan's node list, not the boards' `room_id`.
 
+- **Simple phone view (decided 2026-10-24):** the iPhone shows only a 2D plan, responder tag locations, and rooms in search-priority order with movement stats (state, confidence, time in state, last 5 minutes), plus floor tabs. The laptop keeps the full presenter view. Responder tags are located room by room from receiver `TAG` lines (`hub/tag_locator.py`), only during an incident.
+
 **Defaults the team has not objected to** (revisit if wrong)
 - v1 keeps only the first 64 CSI values per packet (the legacy training field) and turns each into one amplitude. The ML teammate should confirm this is enough for the model.
 

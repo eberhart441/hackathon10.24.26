@@ -14,6 +14,9 @@ import { PriorityList } from './PriorityList';
 import { HealthSheet, RoomSheet } from './Sheets';
 import { LaptopBar } from './LaptopBar';
 import { CrewIcon } from './icons';
+import { PhoneView } from './PhoneView';
+
+const PHONE_VIEW_FORCED = new URLSearchParams(location.search).get('view') === 'phone';
 
 type Phase = 'boot' | 'pair' | 'ready' | 'plan-error' | 'offline';
 
@@ -185,6 +188,16 @@ export function App() {
       </div>
     );
   if (!plan || !model) return null;
+
+  // Phones get the simple responder view; the laptop keeps the presenter view (?view=phone forces it).
+  if (!laptop || PHONE_VIEW_FORCED) {
+    return (
+      <>
+        {flash ? <div class="flash" aria-hidden="true" /> : null}
+        <PhoneView plan={plan} model={model} store={s} now={now} floorId={floorId} onFloor={setFloorId} />
+      </>
+    );
+  }
 
   const room = roomOpen ? model.rooms.find((r) => r.id === roomOpen) : null;
   const offFloorChips = model.crewChips.filter((c) => c.floorId !== floorId);

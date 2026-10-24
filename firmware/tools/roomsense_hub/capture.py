@@ -118,7 +118,7 @@ def run_capture(args: argparse.Namespace) -> int:
         meta.update(rows=sink.rows, ended_utc=datetime.now(timezone.utc).isoformat(),
                     streams=[s.__dict__ for s in ingest.stream_stats()])
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    print(f"Saved {sink.rows} CSI rows to {csv_path}")
+    print(f"Saved {sink.rows} CSI rows to {csv_path}" + (f" ({sink.skipped} skipped: different n_sub)" if sink.skipped else ""))
     return 0
 
 

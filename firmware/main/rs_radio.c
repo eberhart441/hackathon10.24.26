@@ -10,7 +10,7 @@
 
 static const char *TAG = "rs_radio";
 
-const unsigned char RS_BROADCAST_MAC[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+const uint8_t RS_BROADCAST_MAC[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
 esp_err_t rs_radio_start(const rs_config_t *cfg)
 {
@@ -25,23 +25,19 @@ esp_err_t rs_radio_start(const rs_config_t *cfg)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ESP_ERROR_CHECK(esp_wifi_set_channel(cfg->channel, WIFI_SECOND_CHAN_NONE));
-    if (cfg->role == RS_ROLE_TX) {
-        /* Same order as the esp-csi csi_send example; receivers recognise this fixed address. */
-        ESP_ERROR_CHECK(esp_wifi_set_mac(WIFI_IF_STA, cfg->own_mac));
-    }
 
     ESP_ERROR_CHECK(esp_now_init());
-    ESP_LOGI(TAG, "radio up: channel %u, HT20", cfg->channel);
+    ESP_LOGI(TAG, "radio up: channel %u, 20 MHz", cfg->channel);
     return ESP_OK;
 }
 
-esp_err_t rs_radio_add_broadcast_peer(const rs_config_t *cfg, bool fixed_rate)
+esp_err_t rs_radio_add_peer(const uint8_t mac[6], uint8_t channel, bool fixed_rate)
 {
     esp_now_peer_info_t peer = {0};
-    peer.channel = cfg->channel;
+    peer.channel = channel;
     peer.ifidx = WIFI_IF_STA;
     peer.encrypt = false;
-    memcpy(peer.peer_addr, RS_BROADCAST_MAC, 6);
+    memcpy(peer.peer_addr, mac, 6);
     esp_err_t err = esp_now_add_peer(&peer);
     if (err != ESP_OK) {
         return err;

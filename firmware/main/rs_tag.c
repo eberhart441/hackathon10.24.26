@@ -30,10 +30,9 @@ static void tag_task(void *arg)
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
 
     rs_tag_packet_t pkt;
+    memset(&pkt, 0, sizeof(pkt));
     memcpy(pkt.magic, RS_TAG_MAGIC, 4);
-    memset(pkt.tag_id, 0, sizeof(pkt.tag_id));
-    strlcpy(pkt.tag_id, s_cfg->tag_id, sizeof(pkt.tag_id));
-    pkt.seq = 0;
+    memcpy(pkt.tag_id, s_cfg->tag_id, strnlen(s_cfg->tag_id, sizeof(pkt.tag_id)));
 
     const int base_ms = 1000 / (s_cfg->pps ? s_cfg->pps : 10);
     for (;;) {
@@ -63,7 +62,7 @@ static void tag_task(void *arg)
 void rs_tag_start(const rs_config_t *cfg)
 {
     s_cfg = cfg;
-    ESP_ERROR_CHECK(rs_radio_add_broadcast_peer(cfg, false));
+    ESP_ERROR_CHECK(rs_radio_add_peer(RS_BROADCAST_MAC, cfg->channel, false));
 #if CONFIG_RS_TAG_LED_GPIO >= 0
     gpio_config_t io = {
         .pin_bit_mask = 1ULL << CONFIG_RS_TAG_LED_GPIO,

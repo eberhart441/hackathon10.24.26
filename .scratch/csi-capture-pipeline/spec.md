@@ -1,10 +1,10 @@
 Status: ready-for-agent
 
-> **Revision (after the RoomSense requirements spec landed).** The intent below still holds. Changes made while implementing, so the firmware meshes with `.kiro/specs/roomsense-occupancy-tool`:
-> - CSI records also carry `room_id`, the transmitter MAC and the channel (spec Req 2.3). Final format: `firmware/docs/serial-protocol.md`.
-> - Node and room names, role, channel, paired transmitter and commissioned tags are set over serial and stored in flash, not chosen at build time (spec Req 3). One image serves every role.
-> - Added the responder-tag role and `TAG,...` summaries (spec Req 23, 24), and 1 Hz heartbeats for every role.
-> - Transmitter address is configurable, so the spec's "2 TX + 2 RX" layout works as well as the "1 TX + 2 RX" layout.
+> **Revision (after the RoomSense requirements spec landed).** The intent below still holds. Changes made while implementing, so the firmware meshes with `.kiro/specs/roomsense-occupancy-tool`. **Where this spec and `design.md` disagree, `design.md` wins** (it defines the final line formats, for example no `room_id` in CSI lines and receiver-only heartbeats):
+> - CSI records carry the transmitter MAC and the channel (spec Req 2.3). Final format: `firmware/docs/serial-protocol.md`.
+> - Node and room names, role, channel, paired transmitter and commissioned tags are set over serial (`SET key=value`) and stored in flash, not chosen at build time (spec Req 3). One image serves every role.
+> - Added the responder-tag role and `TAG,...` summaries (spec Req 23, 24). Only receivers send heartbeats.
+> - The transmitter unicasts to its paired receiver (or broadcasts if none is set), so the spec's "2 TX + 2 RX" layout works as well as "1 TX + 2 RX".
 > - `esp_csi_gain_ctrl` is downloaded at build time as an IDF managed component, not copied into the repo. UDP transport is deferred.
 > - Needs ESP-IDF v6.0 (some API names changed, for example `WIFI_BW20`).
 > - Glossary mapping: master = TX_Node, slave = RX_Node.

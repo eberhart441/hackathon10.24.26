@@ -11,32 +11,30 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
-from .protocol import (
-    AMPLITUDE_COUNT,
-    Boot,
-    CsiRecord,
-    Heartbeat,
-    Record,
-    TagSummary,
-    parse_line,
-)
+from .protocol import CsiRecord, Heartbeat, Record, TagSummary, parse_line
 from .sequence import SequenceTracker
 
-CSV_COLUMNS = (
-    ["arrival_unix_s", "node_id", "room_id", "tx_mac", "seq", "t_us", "rssi", "channel"]
-    + [f"a{i}" for i in range(AMPLITUDE_COUNT)]
-)
+CSV_FIXED_COLUMNS = ["arrival_unix_s", "node_id", "tx_mac", "seq", "ts_us", "rssi_dbm", "channel"]
+
+
+def csv_columns(n_sub: int) -> list[str]:
+    return CSV_FIXED_COLUMNS + [f"a{i}" for i in range(n_sub)]
 
 
 class CsvSink:
-    """Appends CSI records to a CSV file as they arrive (flushed every row)."""
+    """Appends CSI records to a CSV file as they arrive (flushed every row).
+
+    The header is written when the first record arrives, because the number of
+    subcarriers (n_sub) comes from the data. Rows with a different n_sub are skipped
+    and counted, so a file always has one consistent width.
+    """
 
     def __init__(self, handle: TextIO):
         self._handle = handle
         self._writer = csv.writer(handle)
-        self._writer.writerow(CSV_COLUMNS)
-        handle.flush()
+        self._n_sub: int | None = None
         self.rows = 0
+        self.skipped = 0
 
     @classmethod
     def open(cls, path: Path) -> "CsvSink":
@@ -44,9 +42,16 @@ class CsvSink:
         return cls(path.open("w", newline="", encoding="utf-8"))
 
     def write(self, arrival_s: float, record: CsiRecord) -> None:
+        n_sub = len(record.amplitudes)
+        if self._n_sub is None:
+            self._n_sub = n_sub
+            self._writer.writerow(csv_columns(n_sub))
+        elif n_sub != self._n_sub:
+            self.skipped += 1
+            return
         self._writer.writerow(
-            [f"{arrival_s:.6f}", record.node_id, record.room_id, record.tx_mac, record.seq,
-             record.t_us, record.rssi, record.channel, *record.amplitudes]
+            [f"{arrival_s:.6f}", record.node_id, record.tx_mac, record.seq, record.ts_us,
+             record.rssi_dbm, record.channel, *record.amplitudes]
         )
         self._handle.flush()
         self.rows += 1
@@ -58,9 +63,7 @@ class CsvSink:
 @dataclass
 class NodeStats:
     node_id: str
-    role: str | None = None
     room_id: str | None = None
-    boot: Boot | None = None
     last_heartbeat: Heartbeat | None = None
     last_seen_s: float | None = None
     last_heartbeat_s: float | None = None
@@ -97,7 +100,6 @@ class Ingest:
             return None
         if isinstance(record, CsiRecord):
             node = self._node(record.node_id)
-            node.room_id = record.room_id
             node.csi_records += 1
             node.last_seen_s = arrival_s
             tracker = self.streams.setdefault((record.node_id, record.tx_mac), SequenceTracker())
@@ -106,13 +108,9 @@ class Ingest:
                 self.sink.write(arrival_s, record)
         elif isinstance(record, Heartbeat):
             node = self._node(record.node_id)
-            node.role, node.room_id = record.role, record.room_id
+            node.room_id = record.room_id
             node.last_heartbeat = record
             node.last_heartbeat_s = node.last_seen_s = arrival_s
-        elif isinstance(record, Boot):
-            node = self._node(record.node_id)
-            node.role, node.room_id, node.boot = record.role, record.room_id, record
-            node.last_seen_s = arrival_s
         elif isinstance(record, TagSummary):
             node = self._node(record.node_id)
             node.room_id = record.room_id
@@ -124,7 +122,11 @@ class Ingest:
         return self.nodes.setdefault(node_id, NodeStats(node_id))
 
     def offline_nodes(self, now_s: float) -> list[str]:
-        """Nodes whose last heartbeat is older than the threshold (or that never sent one)."""
+        """Receivers whose last heartbeat is older than the threshold (or that never sent one).
+
+        Transmitters and tags send no heartbeat, so they never appear here; the hub infers
+        a transmitter's health from its receiver's measured_pps.
+        """
         late = []
         for node in self.nodes.values():
             if node.last_heartbeat_s is None or now_s - node.last_heartbeat_s > self.offline_after_s:

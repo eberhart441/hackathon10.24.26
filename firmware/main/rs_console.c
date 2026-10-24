@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -17,6 +18,7 @@
 
 #include "rs_out.h"
 #include "rs_proto.h"
+#include "rs_util.h"
 
 static const char *TAG = "rs_console";
 
@@ -36,8 +38,67 @@ static int read_byte(void)
     return n == 1 ? (int)c : -1;
 }
 
+static void print_config(void)
+{
+    char mac[18];
+    uint8_t factory[6];
+    const rs_config_t *c = s_pending;
+
+    rs_out_printf("CFG,node_id=%s", c->node_id);
+    rs_out_printf("CFG,room_id=%s", c->room_id);
+    rs_out_printf("CFG,role=%s", rs_role_name(c->role));
+    rs_out_printf("CFG,channel=%u", c->channel);
+    rs_out_printf("CFG,pps=%u", c->pps);
+    rs_mac_format(c->peer, mac);
+    rs_out_printf("CFG,peer=%s", mac);
+    rs_mac_format(c->paired_tx, mac);
+    rs_out_printf("CFG,paired_tx=%s", mac);
+    rs_out_printf("CFG,tag_id=%s", c->tag_id);
+    rs_out_printf("CFG,tags=%s", c->tags);
+    rs_out_printf("CFG,rx_mode=HUB");
+    if (esp_read_mac(factory, ESP_MAC_WIFI_STA) == ESP_OK) {
+        rs_mac_format(factory, mac);
+        rs_out_printf("CFG,mac=%s", mac); /* what a paired receiver should use as paired_tx */
+    }
+    rs_out_printf("CFG,fw_version=%s", CONFIG_RS_FW_VERSION);
+}
+
+/* SET key=value [key=value ...]: each pair is validated and saved on its own. */
+static void handle_set(char *args)
+{
+    char *save = NULL;
+    char *pair = strtok_r(args, " \t", &save);
+    if (pair == NULL) {
+        rs_out_printf("ERR,SET,usage");
+        return;
+    }
+    for (; pair != NULL; pair = strtok_r(NULL, " \t", &save)) {
+        char *eq = strchr(pair, '=');
+        if (eq == NULL || eq == pair) {
+            rs_out_printf("ERR,SET,usage");
+            continue;
+        }
+        *eq = '\0';
+        const char *key = pair;
+        const char *value = eq + 1;
+        const char *err = NULL;
+        if (!rs_config_set(s_pending, key, value, &err)) {
+            rs_out_printf("ERR,SET,%s", err ? err : "invalid");
+        } else if (rs_config_save(s_pending) != ESP_OK) {
+            rs_out_printf("ERR,SET,save_failed");
+        } else {
+            rs_out_printf("OK,SET,%s", key);
+        }
+    }
+}
+
 static void handle_line(char *line)
 {
+    /* Lines the hub sends to every receiver (CMD,ALARM,... etc.) are for EDGE_Mode; in
+     * HUB_Mode they are ignored silently. */
+    if (strncmp(line, "CMD,", 4) == 0) {
+        return;
+    }
     char *save = NULL;
     char *cmd = strtok_r(line, " \t", &save);
     if (cmd == NULL) {
@@ -45,36 +106,16 @@ static void handle_line(char *line)
     }
     if (strcmp(cmd, "PING") == 0) {
         rs_out_printf("PONG,%s", s_live->node_id);
-    } else if (strcmp(cmd, "CFG") == 0) {
-        char *sub = strtok_r(NULL, " \t", &save);
-        if (sub == NULL) {
-            rs_out_printf("ERR,CFG,usage");
-        } else if (strcmp(sub, "GET") == 0) {
-            char body[RS_LINE_MAX - 8];
-            rs_config_format(s_pending, body, sizeof(body));
-            rs_out_printf("CFG,%s", body);
-        } else if (strcmp(sub, "SET") == 0) {
-            char *key = strtok_r(NULL, " \t", &save);
-            char *value = strtok_r(NULL, " \t", &save);
-            const char *err = NULL;
-            if (key == NULL || value == NULL) {
-                rs_out_printf("ERR,CFG,usage");
-            } else if (!rs_config_set(s_pending, key, value, &err)) {
-                rs_out_printf("ERR,CFG,%s", err ? err : "invalid");
-            } else if (rs_config_save(s_pending) != ESP_OK) {
-                rs_out_printf("ERR,CFG,save_failed");
-            } else {
-                rs_out_printf("OK,CFG,%s", key);
-            }
-        } else if (strcmp(sub, "RESET") == 0) {
-            rs_config_defaults(s_pending);
-            if (rs_config_erase() == ESP_OK) {
-                rs_out_printf("OK,CFG,RESET");
-            } else {
-                rs_out_printf("ERR,CFG,save_failed");
-            }
+    } else if (strcmp(cmd, "GET") == 0) {
+        print_config();
+    } else if (strcmp(cmd, "SET") == 0) {
+        handle_set(save ? save : (char *)"");
+    } else if (strcmp(cmd, "FACTORY_RESET") == 0) {
+        rs_config_defaults(s_pending);
+        if (rs_config_erase() == ESP_OK) {
+            rs_out_printf("OK,FACTORY_RESET");
         } else {
-            rs_out_printf("ERR,CFG,usage");
+            rs_out_printf("ERR,FACTORY_RESET,failed");
         }
     } else if (strcmp(cmd, "REBOOT") == 0) {
         rs_out_printf("OK,REBOOT");

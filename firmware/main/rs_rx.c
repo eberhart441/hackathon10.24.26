@@ -66,7 +66,7 @@ static void csi_cb(void *ctx, wifi_csi_info_t *info)
     }
     /* Privacy: the very first thing we do is drop anything not from our paired transmitter.
      * Nothing about any other device is read, counted, or printed. */
-    if (memcmp(info->mac, s_cfg->paired_tx_mac, 6) != 0) {
+    if (memcmp(info->mac, s_cfg->paired_tx, 6) != 0) {
         return;
     }
     if (info->len < RS_AMP_COUNT * 2 || info->payload == NULL || info->payload_len < RS_SEQ_OFFSET + 4) {
@@ -119,8 +119,8 @@ static void writer_task(void *arg)
             amps[0] = 0; /* the first 4 bytes (2 samples) are not valid on some chips */
             amps[1] = 0;
         }
-        size_t n = rs_fmt_csi(line, sizeof(line), s_cfg->node_id, s_cfg->room_id, s_tx_mac_str, item.seq, item.t_us,
-                              item.rssi, item.channel, amps);
+        size_t n = rs_fmt_csi(line, sizeof(line), s_cfg->node_id, s_tx_mac_str, item.seq, item.t_us, item.rssi,
+                              item.channel, amps, RS_AMP_COUNT);
         rs_out_write(line, n);
     }
 }
@@ -134,9 +134,9 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
     if (memcmp(pkt->magic, RS_TAG_MAGIC, 4) != 0) {
         return;
     }
-    char id[RS_TAG_ID_MAX + 2];
-    memcpy(id, pkt->tag_id, RS_TAG_ID_MAX + 1);
-    id[RS_TAG_ID_MAX + 1] = '\0';
+    char id[RS_TAG_ID_MAX + 1];
+    memcpy(id, pkt->tag_id, RS_TAG_ID_MAX);
+    id[RS_TAG_ID_MAX] = '\0';
     if (!rs_list_contains(s_cfg->tags, id)) {
         return; /* only commissioned tags are ever recorded */
     }
@@ -172,7 +172,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
 void rs_rx_start(const rs_config_t *cfg)
 {
     s_cfg = cfg;
-    rs_mac_format(cfg->paired_tx_mac, s_tx_mac_str);
+    rs_mac_format(cfg->paired_tx, s_tx_mac_str);
     memset(s_tags, 0, sizeof(s_tags));
 
     s_queue = xQueueCreate(CONFIG_RS_OUT_QUEUE_LEN, sizeof(csi_item_t));

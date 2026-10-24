@@ -31,31 +31,18 @@ static void report_task(void *arg)
     (void)arg;
     TickType_t last = xTaskGetTickCount();
     char line[RS_LINE_MAX];
+    char paired[18];
+    rs_mac_format(s_live.paired_tx, paired);
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(1000));
 
-        unsigned pps = 0;
-        uint32_t dropped = 0;
-        switch (s_live.role) {
-        case RS_ROLE_TX:
-            pps = rs_tx_take_count();
-            break;
-        case RS_ROLE_RX:
-            pps = rs_rx_take_count();
-            dropped = rs_rx_dropped();
-            break;
-        default:
-            pps = rs_tag_take_count();
-            break;
-        }
+        /* Receivers only: transmitters and tags have no serial link to the hub at runtime and
+         * send no heartbeat (requirement 3.5). The hub infers their health from this line. */
         uint32_t uptime_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        size_t n = rs_fmt_hb(line, sizeof(line), s_live.node_id, rs_role_name(s_live.role), s_live.room_id, uptime_ms,
-                             pps, s_live.channel, dropped);
+        size_t n = rs_fmt_hb(line, sizeof(line), s_live.node_id, s_live.room_id, paired, CONFIG_RS_FW_VERSION,
+                             uptime_ms, rs_rx_take_count(), esp_get_free_heap_size(), rs_rx_dropped(), "HUB");
         rs_out_write(line, n);
-
-        if (s_live.role == RS_ROLE_RX) {
-            rs_rx_emit_tag_summaries(&s_live);
-        }
+        rs_rx_emit_tag_summaries(&s_live);
     }
 }
 
@@ -71,11 +58,6 @@ void app_main(void)
     rs_config_load(&s_live);
     s_pending = s_live;
 
-    char line[RS_LINE_MAX];
-    size_t n = rs_fmt_boot(line, sizeof(line), s_live.node_id, rs_role_name(s_live.role), s_live.room_id,
-                           CONFIG_RS_FW_VERSION, s_live.channel, "HT20");
-    rs_out_write(line, n);
-
     rs_console_start(&s_live, &s_pending);
     ESP_ERROR_CHECK(rs_radio_start(&s_live));
 
@@ -85,11 +67,10 @@ void app_main(void)
         break;
     case RS_ROLE_RX:
         rs_rx_start(&s_live);
+        xTaskCreate(report_task, "rs_report", 4096, NULL, 5, NULL);
         break;
     default:
         rs_tag_start(&s_live);
         break;
     }
-
-    xTaskCreate(report_task, "rs_report", 4096, NULL, 5, NULL);
 }

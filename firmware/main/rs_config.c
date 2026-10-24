@@ -1,6 +1,5 @@
 #include "rs_config.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,7 +10,7 @@
 
 #define NVS_NAMESPACE "roomsense"
 #define NVS_KEY "cfg"
-#define CFG_MAGIC 0x52534331u /* "RSC1": bump when the struct layout changes */
+#define CFG_MAGIC 0x52534332u /* "RSC2": bump when the struct layout changes */
 
 typedef struct {
     uint32_t magic;
@@ -30,6 +29,11 @@ const char *rs_role_name(rs_role_t role)
     }
 }
 
+static uint16_t default_pps(rs_role_t role)
+{
+    return (role == RS_ROLE_TAG) ? (uint16_t)CONFIG_RS_DEFAULT_TAG_PPS : (uint16_t)CONFIG_RS_DEFAULT_TX_PPS;
+}
+
 void rs_config_defaults(rs_config_t *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
@@ -43,11 +47,9 @@ void rs_config_defaults(rs_config_t *cfg)
     cfg->role = RS_ROLE_RX;
 #endif
     cfg->channel = (uint8_t)CONFIG_RS_DEFAULT_CHANNEL;
-    cfg->pps = (cfg->role == RS_ROLE_TAG) ? (uint16_t)CONFIG_RS_DEFAULT_TAG_PPS : (uint16_t)CONFIG_RS_DEFAULT_TX_PPS;
-    /* Same fixed, locally administered address as the esp-csi csi_send example. */
-    const uint8_t default_mac[6] = {0x1a, 0x00, 0x00, 0x00, 0x00, 0x00};
-    memcpy(cfg->own_mac, default_mac, 6);
-    memcpy(cfg->paired_tx_mac, default_mac, 6);
+    cfg->pps = default_pps(cfg->role);
+    memset(cfg->peer, 0xff, 6); /* broadcast until a receiver is paired */
+    memset(cfg->paired_tx, 0, 6); /* nothing paired yet: a receiver accepts no CSI until this is set */
     strlcpy(cfg->tag_id, "E1", sizeof(cfg->tag_id));
     cfg->tags[0] = '\0';
 }
@@ -64,7 +66,7 @@ static bool config_valid(const rs_config_t *c)
            (c->role == RS_ROLE_TX || c->role == RS_ROLE_RX || c->role == RS_ROLE_TAG) && channel_ok(c->channel) &&
            c->pps >= 1 && c->pps <= 200 && rs_valid_name(c->tag_id, RS_TAG_ID_MAX) &&
            memchr(c->tags, '\0', sizeof(c->tags)) != NULL && rs_valid_tag_list(c->tags, RS_MAX_TAGS) &&
-           (c->own_mac[0] & 0x01) == 0 && (c->paired_tx_mac[0] & 0x01) == 0;
+           ((c->peer[0] & 0x01) == 0 || rs_mac_is_broadcast(c->peer)) && (c->paired_tx[0] & 0x01) == 0;
 }
 
 void rs_config_load(rs_config_t *cfg)
@@ -114,6 +116,17 @@ esp_err_t rs_config_erase(void)
     return err;
 }
 
+static bool parse_int_range(const char *value, long low, long high, long *out)
+{
+    char *end;
+    long v = strtol(value, &end, 10);
+    if (*value == '\0' || *end != '\0' || v < low || v > high) {
+        return false;
+    }
+    *out = v;
+    return true;
+}
+
 bool rs_config_set(rs_config_t *cfg, const char *key, const char *value, const char **err)
 {
     const char *dummy;
@@ -151,32 +164,37 @@ bool rs_config_set(rs_config_t *cfg, const char *key, const char *value, const c
         }
         if (role != cfg->role) {
             /* pps means different things per role, so changing role restores that role's default rate. */
-            cfg->pps = (role == RS_ROLE_TAG) ? (uint16_t)CONFIG_RS_DEFAULT_TAG_PPS : (uint16_t)CONFIG_RS_DEFAULT_TX_PPS;
+            cfg->pps = default_pps(role);
         }
         cfg->role = role;
     } else if (strcmp(key, "channel") == 0) {
-        char *end;
-        long ch = strtol(value, &end, 10);
-        if (*value == '\0' || *end != '\0' || !channel_ok((int)ch)) {
+        long ch;
+        if (!parse_int_range(value, 1, 13, &ch) || !channel_ok((int)ch)) {
             *err = "bad_channel";
             return false;
         }
         cfg->channel = (uint8_t)ch;
     } else if (strcmp(key, "pps") == 0) {
-        char *end;
-        long v = strtol(value, &end, 10);
-        if (*value == '\0' || *end != '\0' || v < 1 || v > 200) {
+        long v;
+        if (!parse_int_range(value, 1, 200, &v)) {
             *err = "bad_pps";
             return false;
         }
         cfg->pps = (uint16_t)v;
-    } else if (strcmp(key, "own_mac") == 0 || strcmp(key, "paired_tx_mac") == 0) {
+    } else if (strcmp(key, "peer") == 0) {
+        uint8_t mac[6];
+        if (!rs_mac_parse(value, mac) || ((mac[0] & 0x01) != 0 && !rs_mac_is_broadcast(mac))) {
+            *err = "bad_mac";
+            return false;
+        }
+        memcpy(cfg->peer, mac, 6);
+    } else if (strcmp(key, "paired_tx") == 0) {
         uint8_t mac[6];
         if (!rs_mac_parse(value, mac) || (mac[0] & 0x01) != 0) {
             *err = "bad_mac";
             return false;
         }
-        memcpy(strcmp(key, "own_mac") == 0 ? cfg->own_mac : cfg->paired_tx_mac, mac, 6);
+        memcpy(cfg->paired_tx, mac, 6);
     } else if (strcmp(key, "tag_id") == 0) {
         if (!rs_valid_name(value, RS_TAG_ID_MAX)) {
             *err = "bad_tag_id";
@@ -189,20 +207,19 @@ bool rs_config_set(rs_config_t *cfg, const char *key, const char *value, const c
             return false;
         }
         strlcpy(cfg->tags, value, sizeof(cfg->tags));
+    } else if (strcmp(key, "rx_mode") == 0) {
+        /* HUB_Mode is the only mode implemented. EDGE and TRAINING need the on-device
+         * feature pipeline, which is not built yet. */
+        if (strcmp(value, "HUB") != 0) {
+            *err = "only_HUB_implemented";
+            return false;
+        }
+    } else if (strcmp(key, "peers") == 0) {
+        *err = "not_implemented"; /* Commissioned_RX list is only used by EDGE_Mode */
+        return false;
     } else {
         *err = "unknown_key";
         return false;
     }
     return true;
-}
-
-int rs_config_format(const rs_config_t *cfg, char *buf, size_t cap)
-{
-    char own[18], paired[18];
-    rs_mac_format(cfg->own_mac, own);
-    rs_mac_format(cfg->paired_tx_mac, paired);
-    return snprintf(buf, cap,
-                    "node_id=%s,room_id=%s,role=%s,channel=%u,pps=%u,own_mac=%s,paired_tx_mac=%s,tag_id=%s,tags=%s",
-                    cfg->node_id, cfg->room_id, rs_role_name(cfg->role), cfg->channel, cfg->pps, own, paired,
-                    cfg->tag_id, cfg->tags);
 }

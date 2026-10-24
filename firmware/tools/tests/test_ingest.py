@@ -8,19 +8,19 @@ import pytest
 
 from roomsense_hub import CsiRecord, Heartbeat, format_record
 from roomsense_hub.capture import CaptureError, check_training_allowed, output_paths
-from roomsense_hub.ingest import CSV_COLUMNS, CsvSink, Ingest
+from roomsense_hub.ingest import CsvSink, Ingest, csv_columns
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_capture.log"
-TX = "1a:00:00:00:00:00"
+TX = "4c:c3:82:20:c5:1c"
 
 
-def csi(node="RX1", seq=0, t_us=0, mac=TX, room="ROOM1"):
-    amps = tuple((seq + i) % 256 for i in range(64))
-    return format_record(CsiRecord(node, room, mac, seq, t_us, -50, 11, amps)) + "\n"
+def csi(node="RX1", seq=0, ts_us=0, mac=TX, n=64):
+    amps = tuple((seq + i) % 256 for i in range(n))
+    return format_record(CsiRecord(node, mac, seq, ts_us, -50, 11, amps)) + "\n"
 
 
-def hb(node="RX1", role="rx", uptime=1000):
-    return format_record(Heartbeat(node, role, "ROOM1", uptime, 100, 11, 0)) + "\n"
+def hb(node="RX1", uptime=1000):
+    return format_record(Heartbeat(node, "R1", TX, "0.1.0", uptime, 100, 181264, 0, "HUB")) + "\n"
 
 
 def test_noise_lines_are_counted_and_ignored():
@@ -44,7 +44,7 @@ def test_loss_is_tracked_per_receiver_and_transmitter():
 def test_two_transmitters_heard_by_one_receiver_are_separate_streams():
     ingest = Ingest()
     ingest.feed_line(csi("RX1", 1, mac=TX), 0)
-    ingest.feed_line(csi("RX1", 1, mac="1a:00:00:00:00:01"), 0)
+    ingest.feed_line(csi("RX1", 1, mac="4c:c3:82:20:c5:1d"), 0)
     assert len(ingest.stream_stats()) == 2
 
 
@@ -61,22 +61,41 @@ def test_a_node_without_heartbeat_for_ten_seconds_is_offline():
 def test_csi_alone_does_not_count_as_a_heartbeat():
     ingest = Ingest()
     ingest.feed_line(csi("RX1", 1), 1.0)
-    assert ingest.offline_nodes(2.0) == ["RX1"]  # streaming data but never said hello
+    assert ingest.offline_nodes(2.0) == ["RX1"]  # streaming data but never sent a heartbeat
 
 
-def test_csv_gets_only_csi_rows_with_all_columns():
+def test_heartbeat_teaches_the_room():
+    ingest = Ingest()
+    ingest.feed_line(hb("RX1"), 1.0)
+    assert ingest.nodes["RX1"].room_id == "R1"
+
+
+def test_csv_gets_only_csi_rows_and_the_header_matches_the_data_width():
     handle = io.StringIO()
     ingest = Ingest(sink=CsvSink(handle))
     ingest.feed_line(hb(), 1.0)
     ingest.feed_line("garbage", 1.0)
-    ingest.feed_line(csi("RX1", 7, t_us=12345), 2.5)
+    ingest.feed_line(csi("RX1", 7, ts_us=12345), 2.5)
     rows = list(csv.reader(io.StringIO(handle.getvalue())))
-    assert rows[0] == CSV_COLUMNS
+    assert rows[0] == csv_columns(64)
     assert len(rows) == 2
-    row = dict(zip(CSV_COLUMNS, rows[1]))
-    assert (row["node_id"], row["seq"], row["t_us"], row["tx_mac"]) == ("RX1", "7", "12345", TX)
+    row = dict(zip(rows[0], rows[1]))
+    assert (row["node_id"], row["seq"], row["ts_us"], row["tx_mac"]) == ("RX1", "7", "12345", TX)
     assert row["arrival_unix_s"] == "2.500000"
     assert [int(row[f"a{i}"]) for i in range(64)] == [(7 + i) % 256 for i in range(64)]
+
+
+def test_rows_with_a_different_subcarrier_count_are_skipped_not_mixed():
+    handle = io.StringIO()
+    sink = CsvSink(handle)
+    ingest = Ingest(sink=sink)
+    ingest.feed_line(csi("RX1", 1, n=64), 1.0)
+    ingest.feed_line(csi("RX1", 2, n=52), 1.1)
+    ingest.feed_line(csi("RX1", 3, n=64), 1.2)
+    rows = list(csv.reader(io.StringIO(handle.getvalue())))
+    assert len(rows) == 3  # header + two 64-wide rows
+    assert all(len(r) == len(rows[0]) for r in rows)
+    assert sink.skipped == 1
 
 
 def test_the_sample_capture_parses_cleanly():
@@ -85,8 +104,9 @@ def test_the_sample_capture_parses_cleanly():
     for i, line in enumerate(FIXTURE.read_text(encoding="utf-8").splitlines(keepends=True)):
         ingest.feed_line(line, i * 0.01)
     assert ingest.total_lines > ingest.ignored_lines > 0
-    assert {n.role for n in ingest.nodes.values()} == {"rx"}
-    assert sum(n.csi_records for n in ingest.nodes.values()) >= 20
+    assert set(ingest.nodes) == {"RX1"}
+    assert ingest.nodes["RX1"].csi_records >= 20
+    assert ingest.nodes["RX1"].last_heartbeat is not None
     assert all(s.lost == 0 for s in ingest.stream_stats())
 
 

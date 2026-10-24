@@ -1,0 +1,10 @@
+{
+  "_comment": "Feet from the top-left corner of the room. Each key under links is a receiver's node_id; tx is where ITS paired transmitter stands. TX1 is in the top-left corner (heard by RX1, RX2); TX2 is in the bottom-right corner (heard by RX3, RX4). Measure your real placement and edit these numbers.",
+  "room": [13, 9.33],
+  "links": {
+    "RX1": {"tx": [0, 0], "rx": [13, 4.67]},
+    "RX2": {"tx": [0, 0], "rx": [6.5, 9.33]},
+    "RX3": {"tx": [13, 9.33], "rx": [0, 4.67]},
+    "RX4": {"tx": [13, 9.33], "rx": [6.5, 0]}
+  }
+}

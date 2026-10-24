@@ -86,6 +86,44 @@ copy authorized_installers.example.txt authorized_installers.txt   # then edit i
 
 `rs-capture` writes one CSV per class (`empty`, `moving`, `still_present`) under `firmware/tools/data/` (git-ignored). Recording is limited to allow-listed installers and consenting people (requirements 17 and 21.5). Other code should import `roomsense_hub` (`parse_line`, `format_record`) instead of writing a second parser.
 
+## Motion location map (six boards: 2 transmitters, 4 receivers)
+
+`rs-view --layout` adds a room map that estimates *where* motion is from which links are disturbed: a zone about 1 to 2 m across, one moving person at a time, never a precise position. It runs on the unchanged firmware above.
+
+**1. Try it with no boards** (from `firmware\tools`, venv set up as above):
+
+```powershell
+.\.venv\Scripts\rs-view.exe --simulate
+```
+
+A virtual person walks a loop, pauses, and walks again. This checks the page, not real accuracy.
+
+**2. Flash all six boards** with `.\flash.ps1 -Port COMx` (one at a time). `.\.venv\Scripts\rs-setup.exe ports` shows which COM port is the board.
+
+**3. Configure them** (one board plugged in at a time is easiest; close any serial monitor first). Transmitters first, so their MACs are known:
+
+```powershell
+.\.venv\Scripts\rs-setup.exe tx COM8 --id TX1
+.\.venv\Scripts\rs-setup.exe tx COM8 --id TX2      # the next board, same port if you swap boards
+.\.venv\Scripts\rs-setup.exe rx COM8 --id RX1 --tx TX1
+.\.venv\Scripts\rs-setup.exe rx COM8 --id RX2 --tx TX1
+.\.venv\Scripts\rs-setup.exe rx COM8 --id RX3 --tx TX2
+.\.venv\Scripts\rs-setup.exe rx COM8 --id RX4 --tx TX2
+.\.venv\Scripts\rs-setup.exe info COM8             # check a board
+```
+
+Transmitter MACs are saved in `tools/boards.json` (git-ignored). Label each board with its name.
+
+**4. Place them** as in [tools/layouts/demo-room.json](tools/layouts/demo-room.json): TX1 in one corner, TX2 in the opposite corner, receivers on the walls so the four links cross the room (the page draws the plan). Boards at about chest height, antennas unobstructed. Transmitters only need power (USB charger or power bank). Receivers each need a USB cable to the laptop (use a powered hub), unless you use relay mode (see [docs/serial-protocol.md](docs/serial-protocol.md)), where each transmitter forwards its receivers' lines and only the transmitters are cabled; then pass the transmitters' ports to `--port`. Relay mode is not yet tested on hardware. If your room or placement differs, measure it in feet from the top-left corner and edit the JSON.
+
+**5. Run it**, one `--port` per receiver:
+
+```powershell
+.\.venv\Scripts\rs-view.exe --layout layouts\demo-room.json --port COM8 --port COM9 --port COM10 --port COM11
+```
+
+Leave the room empty for the first ~5 seconds (each link learns its quiet level; press **Reset baseline** to relearn), then walk through it. Expect each link to light up as you cross it, and the dot to follow you at zone level with about a one-second lag.
+
 ## Build from source
 
 Needs ESP-IDF v6.0 (install with Espressif's `eim`, with the `mcp` feature if you want Kiro to drive the build). The first build downloads the `esp_csi_gain_ctrl` component, so it needs internet.

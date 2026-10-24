@@ -10,6 +10,7 @@ tools/.hypothesis/
 tools/.pytest_cache/
 tools/data/
 tools/authorized_installers.txt
+tools/boards.json
 tools/*.egg-info/
 __pycache__/
 

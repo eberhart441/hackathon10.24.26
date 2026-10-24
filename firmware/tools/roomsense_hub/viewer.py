@@ -28,8 +28,11 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .locate import Layout, Locator, link_score, load_layout
 from .protocol import CsiRecord, Heartbeat, TagSummary, parse_line
 from .sequence import SequenceTracker
+
+DEFAULT_LAYOUT = Path(__file__).resolve().parent.parent / "layouts" / "demo-room.json"
 
 WINDOW = 100          # packets (about one second) used for the activity measure
 MIN_WINDOW = 30       # packets needed before we show an activity number
@@ -175,8 +178,10 @@ class NodeView:
 class Hub:
     """Shared state: the nodes, the port errors, and the browsers listening."""
 
-    def __init__(self) -> None:
+    def __init__(self, layout: Layout | None = None) -> None:
         self.lock = threading.Lock()
+        self.layout = layout
+        self.locator = Locator(layout) if layout else None
         self.nodes: dict[str, NodeView] = {}
         self.errors: dict[str, str] = {}
         self.port_nodes: dict[str, set[str]] = {}
@@ -225,7 +230,17 @@ class Hub:
         with self.lock:
             nodes = [n.snapshot(now) for _, n in sorted(self.nodes.items())]
             errors = dict(self.errors)
-        return json.dumps({"t": now, "nodes": nodes, "errors": errors})
+            message = {"t": now, "nodes": nodes, "errors": errors}
+            if self.locator is not None:
+                scores = {}
+                for link in self.layout.links:
+                    node = self.nodes.get(link.rx_id)
+                    snap = next((n for n in nodes if n["id"] == link.rx_id), None)
+                    scores[link.rx_id] = None if node is None or snap is None else \
+                        link_score(snap["state"], snap["activity"], node.baseline, snap["threshold"])
+                message["layout"] = self.layout.to_json()
+                message["location"] = self.locator.update(scores)
+        return json.dumps(message)
 
     # --- browsers ------------------------------------------------------------
     def subscribe(self) -> "queue.Queue[str]":
@@ -337,18 +352,28 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", action="append", default=[], help="receiver serial port (repeat for several)")
     p.add_argument("--baud", type=int, default=921600)
     p.add_argument("--replay", type=Path, help="play back a captured log instead of reading hardware")
+    p.add_argument("--layout", type=Path,
+                   help="room and link positions (JSON) for the motion location map, for example layouts/demo-room.json")
+    p.add_argument("--simulate", action="store_true",
+                   help="fake receivers with a virtual walker, using --layout (default layouts/demo-room.json)")
     p.add_argument("--http-port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true")
     args = p.parse_args(argv)
-    if not args.port and not args.replay:
-        p.error("give at least one --port (for example --port COM3), or --replay FILE")
+    if not args.port and not args.replay and not args.simulate:
+        p.error("give at least one --port (for example --port COM3), --replay FILE, or --simulate")
+    if args.simulate and not args.layout:
+        args.layout = DEFAULT_LAYOUT
+    layout = load_layout(args.layout) if args.layout else None
 
-    hub, stop = Hub(), threading.Event()
+    hub, stop = Hub(layout), threading.Event()
     threads = [threading.Thread(target=ticker, args=(hub, stop), daemon=True)]
     for port in args.port:
         threads.append(threading.Thread(target=serial_reader, args=(hub, port, args.baud, stop), daemon=True))
     if args.replay:
         threads.append(threading.Thread(target=replay_reader, args=(hub, args.replay, stop), daemon=True))
+    if args.simulate:
+        from .simulate import run as simulate
+        threads.append(threading.Thread(target=simulate, args=(layout, hub.feed_line, stop), daemon=True))
     for t in threads:
         t.start()
 
@@ -404,9 +429,15 @@ PAGE = r"""<!doctype html>
 not the detection model, and &ldquo;quiet&rdquo; never means a room is empty. Walk between the two boards and watch the picture change.</p>
 <div id="errors"></div>
 <div id="waiting">Waiting for data from the receiver&hellip;</div>
+<div class="card" id="where" style="display:none">
+  <div class="head"><div class="title">Where is the motion?</div><span class="badge" id="where-badge"></span><span class="sub" id="where-text"></span></div>
+  <div class="label">Estimated from which links are disturbed: a zone about 1 to 2 m across, for one moving person. Orange = likely area,
+  white dot = estimate (ring = uncertainty), faded dots = recent path. Someone who stops moving drops off the map; that never means they left.</div>
+  <canvas id="locate" width="800" height="560"></canvas>
+</div>
 <div class="card" id="overview">
   <div class="title">Room overview</div>
-  <div class="label">Schematic of the demo room (13 ft x 9 ft 4 in) with the planned node layout. Each line is a radio link from the
+  <div class="label" id="room-label">Schematic of the demo room (13 ft x 9 ft 4 in) with the planned node layout. Each line is a radio link from the
   transmitter (TX) to a receiver; its colour is what that link sees. If your boards are placed differently, edit LAYOUT in this page's script.</div>
   <canvas id="room" width="800" height="290"></canvas>
   <div class="label">Activity on every link, last 30 seconds (a walker should disturb one link and then the other).</div>
@@ -548,13 +579,81 @@ function drawTimeline(nodes) {
   });
 }
 
+function drawLocation(layout, loc, nodes) {
+  const cv = document.getElementById('locate'), g = cv.getContext('2d');
+  const [rw, rh] = layout.room, pad = 40;
+  const S = Math.min((cv.width - 2 * pad) / rw, (cv.height - 2 * pad) / rh);
+  const X0 = (cv.width - rw * S) / 2, Y0 = (cv.height - rh * S) / 2;
+  const P = p => [X0 + p[0] * S, Y0 + p[1] * S];
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.fillStyle = '#0b0f14'; g.fillRect(X0, Y0, rw * S, rh * S);
+  // likelihood grid, only while something is moving
+  if (loc.moving) {
+    const {cols, rows, cells} = loc.grid, cw = rw * S / cols, ch = rh * S / rows;
+    cells.forEach((v, i) => {
+      if (v < 0.15) return;
+      g.fillStyle = `rgba(255,159,28,${(v * 0.75).toFixed(2)})`;
+      g.fillRect(X0 + (i % cols) * cw, Y0 + Math.floor(i / cols) * ch, cw + 0.5, ch + 0.5);
+    });
+  }
+  g.strokeStyle = '#4b5d70'; g.lineWidth = 3; g.strokeRect(X0, Y0, rw * S, rh * S);
+  // grid lines every foot
+  g.strokeStyle = 'rgba(75,93,112,0.25)'; g.lineWidth = 1;
+  for (let f = 1; f < rw; f++) { g.beginPath(); g.moveTo(X0 + f * S, Y0); g.lineTo(X0 + f * S, Y0 + rh * S); g.stroke(); }
+  for (let f = 1; f < rh; f++) { g.beginPath(); g.moveTo(X0, Y0 + f * S); g.lineTo(X0 + rw * S, Y0 + f * S); g.stroke(); }
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const txs = {};
+  layout.links.forEach(l => {
+    const n = byId[l.rx_id], state = n ? n.state : 'nosignal', col = STATE_COLOUR[state] || '#6b7c8f';
+    const a = P(l.tx), b = P(l.rx);
+    g.strokeStyle = col; g.lineWidth = state === 'motion' ? 5 : 2;
+    g.setLineDash(state === 'weak' || state === 'nosignal' || state === 'warming' ? [8, 6] : []);
+    g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.beginPath(); g.arc(b[0], b[1], 9, 0, 7); g.fill();
+    g.fillStyle = '#e6edf3'; g.font = '13px system-ui';
+    const s = loc.scores[l.rx_id];
+    g.fillText(l.rx_id + (n ? '' : ' (not seen)') + (s === null || s === undefined ? '' : '  ' + s.toFixed(1)), b[0] + 12, b[1] - 10);
+    txs[l.tx.join(',')] = a;
+  });
+  Object.values(txs).forEach((a, i) => {
+    g.fillStyle = '#e6edf3'; g.fillRect(a[0] - 8, a[1] - 8, 16, 16);
+    g.font = '13px system-ui'; g.fillText('TX', a[0] + 12, a[1] + 18);
+  });
+  loc.trail.forEach((p, i) => {
+    const q = P(p); g.fillStyle = `rgba(108,182,255,${(0.1 + 0.6 * i / loc.trail.length).toFixed(2)})`;
+    g.beginPath(); g.arc(q[0], q[1], 4, 0, 7); g.fill();
+  });
+  const badge = document.getElementById('where-badge'), text = document.getElementById('where-text');
+  if (loc.moving) {
+    const q = P([loc.x, loc.y]);
+    g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; g.beginPath(); g.arc(q[0], q[1], loc.spread * S, 0, 7); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(q[0], q[1], 9, 0, 7); g.fill();
+    badge.textContent = 'MOTION'; badge.className = 'badge b-motion';
+    text.textContent = `near x ${loc.x.toFixed(1)} ft, y ${loc.y.toFixed(1)} ft (±${loc.spread.toFixed(1)} ft)`;
+  } else {
+    if (loc.last) {
+      const q = P(loc.last); g.strokeStyle = '#9fb0c0'; g.lineWidth = 2; g.setLineDash([3, 3]);
+      g.beginPath(); g.arc(q[0], q[1], 9, 0, 7); g.stroke(); g.setLineDash([]);
+    }
+    badge.textContent = 'NO MOTION'; badge.className = 'badge b-quiet';
+    text.textContent = loc.last ? 'dashed ring = last place motion was seen. Not moving ≠ not there.' : 'no motion seen yet';
+  }
+}
+
 const es = new EventSource('/events');
 es.onmessage = e => {
   const m = JSON.parse(e.data);
   document.getElementById('waiting').style.display = m.nodes.length ? 'none' : 'block';
   document.getElementById('errors').textContent = Object.entries(m.errors).map(([p, msg]) => `Port ${p}: ${msg}`).join('   ');
   m.nodes.forEach(update);
-  drawRoom(m.nodes);
+  if (m.layout) {
+    document.getElementById('where').style.display = 'block';
+    document.getElementById('room').style.display = 'none';
+    document.getElementById('room-label').style.display = 'none';
+    drawLocation(m.layout, m.location, m.nodes);
+  } else {
+    drawRoom(m.nodes);
+  }
   drawTimeline(m.nodes);
 };
 es.onerror = () => { document.getElementById('waiting').textContent = 'Lost connection to the viewer. Is rs-view still running?'; document.getElementById('waiting').style.display = 'block'; };

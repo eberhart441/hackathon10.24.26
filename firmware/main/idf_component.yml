@@ -1,0 +1,5 @@
+## IDF Component Manager Manifest File
+dependencies:
+  idf: ">=5.4.0"
+  # CSI receive-gain compensation, from Espressif (same dependency as the esp-csi csi_recv example).
+  esp_csi_gain_ctrl: ">=0.1.4"

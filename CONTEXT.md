@@ -163,7 +163,27 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - **Team size:** 4 (the maximum).
 - **Regulatory/certification:** out of scope for the pitch (team decision).
 
+**Decided (firmware, round 1)**
+- **Toolchain:** plain ESP-IDF (`idf.py`), built from Espressif's `csi_send` / `csi_recv` examples. Not Arduino, not PlatformIO.
+- **Receiver output:** one compact text line per packet with a computed amplitude per subcarrier (not raw I/Q), plus the master's packet counter, the slave's ID, a timestamp, and signal strength. Move to a binary format only if the data rate becomes a problem.
+- **Radio settings:** 20 MHz bandwidth, 100 packets/s, channel chosen at the venue (least busy of 1, 6, 11 from a WiFi scan on the laptop). Test whether 20 MHz costs sensitivity.
+- **Terminology:** the team keeps **master** (the one node that broadcasts) and **slave** (a node that listens), plus **link** and **node**. See `GLOSSARY.md`.
+- **Boards:** confirmed with `esptool chip-id` on the first board: a **classic ESP32** (ESP32-D0WD-V3, the Arduino "ESP32 Dev Module"), not a C3. The firmware also builds for the C3, but the flash images for the ESP32 are the ones to use. Any extra boards should be the same model so all nodes match. Classic ESP32 has no receive-gain compensation in the esp-csi example.
+- **Firmware status:** one runtime-configured firmware image for `tx`, `rx` and `tag` roles lives in `firmware/` (on the `firmware` branch). It builds for both chips. On one real ESP32 (receiver role) it boots, prints valid protocol lines and handles serial commands; the transmitter-to-receiver CSI path has **not** been tested yet. Serial contract: `firmware/docs/serial-protocol.md`. Flashing uses the Arduino IDE's esptool via `firmware/flash.ps1` (the Arduino IDE itself cannot upload an ESP-IDF image).
+- **Meshing with the RoomSense spec** (`.kiro/specs/roomsense-occupancy-tool`): records carry `node_id`, `room_id`, TX MAC, sequence number, timestamp, RSSI, channel and per-subcarrier amplitude (Req 2.3); node and room names are set over serial without reflashing and kept across reboots (Req 3); 1 Hz heartbeats with measured packet rate (Req 3.1, 19); responder-tag firmware and `TAG,...` summaries in the spec's exact format (Req 23, 24). Not built: UDP transport (Req 2.5) and anything on the hub side beyond a parser and a training-data recorder.
+- **Privacy enforcement:** extra work on tests/hooks to enforce the privacy rules is **deprioritized for now** (team decision). The stock MAC filter in `csi_recv` stays on because it is already in the example. Revisit before submission, and do not claim in the pitch that privacy is enforced by tests or hooks unless we build them.
+
+**Decided (firmware, round 2)**
+- **Structure:** one ESP-IDF firmware project; each board's role (master, slave 1, slave 2) is chosen when building/flashing, so any board can be any role.
+- **esp-csi code:** copy the few files we need (`csi_send`, `csi_recv`, the gain-control component) into `firmware/` with the Apache-2.0 license kept, instead of a git submodule. Credit Espressif in "Used vs. Built".
+- **Dev MCP:** use ESP-IDF's built-in `idf.py mcp-server` (needs ESP-IDF v6.0+ and the `mcp` feature; see Firmware Design). The other MCP options are optional and listed there.
+
+**Defaults the team has not objected to** (revisit if wrong)
+- v1 keeps only the first 64 CSI values per packet (the legacy training field) and turns each into one amplitude. The ML teammate should confirm this is enough for the model.
+
 **Still open** (not yet answered)
+- Exact ESP32-C3 board model and USB type (UART chip vs native USB). Team will know soon.
+- Whether to build the optional "score-only" mode on the slaves (stretch; decide after streaming works).
 - Always-on minimal "motion last seen" mode vs. alarm-triggered only (see the design tradeoff above).
 - Stillness timer value for the demo vs. the 3-minute figure in the pitch.
 - Who owns what across the four people.
@@ -171,11 +191,66 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - Whether the dashboard shows a headcount or only events and room state.
 - Whether other rooms on the floor plan are simulated and labeled.
 
+## Firmware Research Notes (facts found, not decisions)
+
+Checked against Espressif's esp-csi repo (Apache-2.0 licensed, examples under `examples/get-started`):
+- **`csi_send`** broadcasts an ESP-NOW packet to `ff:ff:ff:ff:ff:ff` at 100 packets/s on a fixed channel (default 11, HT40, MCS0). It sets its own MAC to a fixed value (`1a:00:00:00:00:00`) and puts a 32-bit counter in the payload.
+- **`csi_recv`** turns on promiscuous mode and a CSI callback. It **drops every frame not from the transmitter's fixed MAC** before doing anything else, which already matches our "ignore everyone else's devices" privacy rule. It reads the transmitter's counter from the payload, so two receivers can line up samples by that sequence number.
+- **Stock output** is one CSV line per packet that prints every raw CSI byte as a decimal number. That is likely around 1 KB or more per packet (my estimate), so at 100 packets/s it is too much for a typical 921600-baud USB-serial link. Compact amplitude-only lines would fit easily.
+- **Gain compensation** in `csi_recv` is compiled in for ESP32-S3, C3, C5, C6 and C61 but not for the classic ESP32.
+- **`wifi_sensing_demo`** (under `esp-radar`) needs a WiFi access point/router, so it does not fit our router-free ESP-NOW setup. Use `csi_send` / `csi_recv` as the base.
+- **Dev MCP options (not vetted by us):** ESP-IDF includes an `idf.py mcp-server` for build, flash, set-target, and device listing, with no serial reading. Community projects add serial/monitor access (for example `esp32-ai-loop-mcp-server` and `esp-idf-monitor-mcp`).
+
+## Firmware Design (draft v1 — agents: follow this unless the team changes it)
+
+**Goal:** get clean per-link CSI amplitude from two slaves to the laptop at 100 packets/s, with one master broadcasting. Everything else (calibration, the model, the state machine, the dashboard) lives on the laptop.
+
+**Roles and build**
+- One ESP-IDF project in `firmware/`. A Kconfig option picks the role (master or slave) and the slave ID (1 or 2). Role settings live in small overlay files (for example `sdkconfig.master`, `sdkconfig.slave1`, `sdkconfig.slave2`) and each role builds into its own build folder.
+- Target chip: `esp32c3`.
+
+**Master**
+- ESP-NOW broadcast to all, from the fixed MAC the esp-csi example uses (`1a:00:00:00:00:00`), 100 packets/s, fixed channel, 20 MHz, MCS0 rate. Payload is a 32-bit counter.
+- Needs only power, so a battery pack works. Prints a short boot banner if a USB cable happens to be attached.
+
+**Slave**
+- Promiscuous mode plus the CSI callback. The first thing the callback does is drop any frame that is not from the master's MAC. It reads the master's counter from the payload.
+- Takes the first 64 CSI values (I/Q pairs) and converts each to an amplitude, `sqrt(I² + Q²)` as an unsigned 0 to 255 integer. Guard-band positions stay in place (they read as zero) so the index equals the subcarrier index.
+- Prints one text line per packet, plus a status line once a second.
+
+**Serial line format** (newline-terminated, comma-separated; draft)
+- `BOOT,<slave_id>,<fw_version>,<channel>,<bandwidth>` once at startup.
+- `CSI,<slave_id>,<seq>,<t_us>,<rssi>,<a0>,<a1>,...,<a63>` per packet. `seq` is the master's counter, `t_us` is the slave's local microsecond clock, `rssi` is in dBm.
+- `STAT,<slave_id>,<uptime_ms>,<packets_from_master>,<channel>` once per second.
+- Estimated size is roughly 250 to 300 bytes per CSI line, so about 25 to 30 KB/s per slave at 100 packets/s (my estimate). That needs at least 460800 baud on a UART-bridge board; native USB is not limited by baud.
+
+**Laptop side (not firmware):** read both serial ports, stamp arrival time, align the two links by `seq`, count gaps in `seq` as lost packets, compute baselines, run the model, feed the state machine and dashboard.
+
+**Configuration:** channel, baud, and the master MAC are Kconfig values. All three boards must use the same channel, so changing it at the venue means rebuilding and reflashing all three. A runtime channel command is a possible later improvement.
+
+**Console / USB:** depends on the board (UART bridge vs native USB-Serial/JTAG). Open until the board model is known. Configure the console to match.
+
+**Testing:** keep the amplitude conversion and the line formatting as pure C functions that can be tested on the host. On the laptop side, a Python parser with a Hypothesis round-trip test (format, then parse, gives the same values).
+
+**Bring-up order (this is milestone M1)**
+1. Install ESP-IDF v6.0+ with the Espressif installer (EIM v0.8.1 or newer) and turn on its `mcp` feature.
+2. Flash one master and one slave from the vendored examples; confirm `CSI,...` lines appear.
+3. Python logger writes the lines to a timestamped CSV.
+4. Walk across the link and look for a clear spike (go/no-go for CSI).
+5. Add the second slave, then the role overlays, then run the master from a battery pack.
+
+**Dev MCP setup**
+- **`idf.py mcp-server` (decided):** tools for set target, build, flash, clean; resources for status and serial ports. Needs ESP-IDF v6.0+ installed with EIM v0.8.1+ and the `mcp` feature on. Register it in Kiro's MCP config and set `IDF_MCP_WORKSPACE_FOLDER` to the `firmware/` folder. It cannot read serial output.
+- **`esp32-ai-loop-mcp-server` (optional):** MIT licensed, works on Windows, adds serial monitor and log search. It handles only one board at a time, and the C3's built-in USB can behave differently on reset. Good for firmware bring-up, not for two live slaves.
+- **`esp-idf-monitor-mcp` (skip):** its monitor tools need a Unix terminal (PTY), so they will not run on Windows.
+- **Our own CSI recorder MCP (planned):** reads both slave ports and records labeled windows to CSV for the model, and lets Kiro look at live numbers.
+- Third-party MCP servers run commands on your laptop; skim the code before installing. I have not audited any of them.
+
 ## Hardware
 
 **Have:** several ESP32 boards, a Raspberry Pi, a touchscreen, breadboards/jumpers, and a sensor kit.
 
-<!-- TODO: confirm how many ESP32s and which variants (need S3 or original ESP32, not S2). Buy 2–3 ESP32-S3 dev boards if short. -->
+<!-- Boards in hand are ESP32-C3 (CSI supported). Still to confirm: how many, and the exact board model / USB type (USB-UART chip vs native USB). Extra boards should be ESP32-C3 too. -->
 
 **Need:** a battery pack for one node, plus tape/cardboard for a mock floor plan and an "obstruction" (a sheet or cardboard wall) to show detection without line of sight.
 

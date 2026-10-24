@@ -27,7 +27,7 @@ The earlier health-wearable plan is cancelled.
 - Test privacy invariants: outbound data has no identifier fields and nothing finer than room level; no incident data is stored when no incident is open.
 - A room never becomes EXITED without a doorway-crossing event; trails only move between adjacent rooms.
 - Raw CSI streaming to the Pi is a dev-only debug mode, off by default, never part of the demo or production path.
-- ESP32 nodes: prefer ESP32-S3 (confirm CSI support for the board in hand). Firmware is C (ESP-IDF or Arduino) on top of Espressif's esp-csi.
+- ESP32 nodes: the team's boards are **ESP32-C3** (CSI is supported per esp-csi; use `idf.py set-target esp32c3`). Buy the same model for any extra boards so all nodes match. Firmware is C (ESP-IDF) built on Espressif's esp-csi `csi_send` / `csi_recv` examples.
 - Prefer small, reviewable changes. Update `CONTEXT.md` (decisions, open questions, Kiro usage log) when something is decided.
 
 ## Agent skills

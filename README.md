@@ -137,6 +137,16 @@ To drive the dashboard from the real pipeline on simulated boards instead:
 hub\.venv\Scripts\python tools\live_hub.py --simulate-boards --simulate-tag
 ```
 
+The laptop dashboard in normal mode: the 3D floor plan with the boards and their radio links, and live sensor health (here one board is flagged with "!" and the header shows **1 fault**). No room states are shown until an alarm.
+
+![Laptop dashboard in normal mode: 3D plan of Room 1, Room 2 and the hallway, sensor health, no room states](docs/images/dashboard-normal.jpg)
+
+After **Trigger alarm (demo)**: the header turns red and recording starts, each room shows its state with a matching floor pattern, the **Search priority** list ranks the rooms to search, and the **AT ALARM** inset keeps the states from the moment the alarm went off. Room 1 reads POSSIBLE with "Motion last seen 0:08 ago" and the secondary ML line underneath.
+
+![Laptop dashboard during an alarm: Room 1 POSSIBLE ranked first, hallway UNKNOWN, search priority list and the at-alarm snapshot](docs/images/dashboard-alarm.jpg)
+
+*These two screenshots were taken before the floor plan switched to `floor plans/walls_only.dxf`, so the hallway is still the earlier hand-drawn strip.*
+
 ---
 
 ## Using `rs-view.exe`

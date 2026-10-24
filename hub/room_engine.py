@@ -10,8 +10,13 @@ trained classifier exists yet. The rules that keep it honest are the design's:
     every link of the room healthy and quiet, continuously, for HOLD_S. Quiet is never "empty".
   - A room with no usable link is UNKNOWN and stale (last known state + age), and stays UNKNOWN
     for RECOVERY_S after its links come back.
-  - Confidence is a heuristic (activity margin x link quality), capped at 49 when a heartbeat is
-    late. It is not a model probability.
+  - During an incident, motion seen once keeps the room flagged (POSSIBLE, "Motion last seen")
+    until the incident ends or a responder marks it searched: someone was there, which is exactly
+    what crews need. Motion up to PRE_ALARM_S before the alarm counts (the rolling buffer).
+  - confidence_pct is a presence likelihood: how likely it is that someone is in the room, from
+    motion only. A quiet room that never showed motion sits at BASELINE_PCT (10) or below; MOTION is
+    90-99; after motion it fades from 90 toward LATCH_FLOOR_PCT (50) and stays there. It is a
+    heuristic, not a model probability, and a low number never means "empty".
 """
 
 from __future__ import annotations
@@ -25,9 +30,12 @@ HOLD_S = 300.0
 HB_DEGRADED_S = 3.0
 HB_OFFLINE_S = 10.0
 RECOVERY_S = 10.0
-PPS_NOMINAL = 100
 PPS_MIN = 20  # below this the link is not judged (the transmitter-dead rule uses the same floor)
 MOTION_TICKS = (2, 3)  # motion in at least 2 of the last 3 ticks (anti-flicker)
+PRE_ALARM_S = 120.0  # motion this long before the alarm still latches the room (rolling buffer)
+BASELINE_PCT = 10  # presence likelihood of a watched, quiet room with no motion: at most this
+QUIET_PCT = 5  # ... after it has been quiet for a further HOLD_S
+LATCH_FLOOR_PCT = 50  # a room that showed motion during the incident never drops below this
 
 USABLE_STATES = ("motion", "quiet")
 LABELS = {"MOTION": "MOTION", "POSSIBLE": "POSSIBLE", "UNKNOWN": "UNKNOWN", "NO_DETECTION": "NO DETECTION"}
@@ -70,13 +78,6 @@ def band(pct: int) -> str:
     return "high" if pct >= 80 else "medium" if pct >= 50 else "low"
 
 
-def _quality(readings: list[LinkReading]) -> float:
-    used = [r for r in readings if r.usable()]
-    if not used:
-        return 0.0
-    return sum(min(1.0, (r.pps or 0) / PPS_NOMINAL) for r in used) / len(used)
-
-
 def _link_health(readings: list[LinkReading]) -> str:
     if not readings or not any(r.online() for r in readings):
         return "offline"
@@ -87,8 +88,12 @@ def _link_health(readings: list[LinkReading]) -> str:
     return "degraded"
 
 
-def update(track: RoomTrack, readings: list[LinkReading], now: float, hold_s: float = HOLD_S) -> dict[str, Any]:
-    """Advance one room by one tick and return its room_states entry (parent design shape)."""
+def update(track: RoomTrack, readings: list[LinkReading], now: float, hold_s: float = HOLD_S,
+           latch_after: float | None = None) -> dict[str, Any]:
+    """Advance one room by one tick and return its room_states entry (parent design shape).
+
+    latch_after: during an incident, the time from which motion latches the room (alarm time minus
+    PRE_ALARM_S); None outside an incident, where the room returns to NO_DETECTION after the hold."""
     usable = [r for r in readings if r.usable()]
     if any(r.state in USABLE_STATES for r in readings):
         track.calibrated = True
@@ -127,38 +132,38 @@ def update(track: RoomTrack, readings: list[LinkReading], now: float, hold_s: fl
 
     if track.motion_hist[-1]:
         track.last_evidence = now  # only a tick that really saw motion counts as evidence
+    latched = latch_after is not None and track.last_evidence is not None and track.last_evidence >= latch_after
     if motion_ev:
         track.state = "MOTION"
     elif track.last_evidence is not None and now - track.last_evidence < hold_s:
         track.state = "POSSIBLE"  # moved, now still: hold (Req 8.6)
-    elif track.state == "MOTION":
-        track.state = "POSSIBLE"  # never MOTION -> NO_DETECTION
+    elif track.state == "MOTION" or latched:
+        track.state = "POSSIBLE"  # never MOTION -> NO_DETECTION; motion during the incident stays flagged
     elif track.quiet_since is not None and now - track.quiet_since >= hold_s:
         track.state = "NO_DETECTION"
     else:
         track.state = "POSSIBLE"  # not watched quietly for long enough: bias to presence (Req 6.5)
 
     track.last_known_state = track.state
-    return _entry(track, track.state, _confidence(track, usable, readings, now, hold_s), readings)
+    return _entry(track, track.state, presence_pct(track, usable, now, hold_s, latched), readings)
 
 
-def _confidence(track: RoomTrack, usable: list[LinkReading], readings: list[LinkReading], now: float,
-                hold_s: float) -> int:
+def presence_pct(track: RoomTrack, usable: list[LinkReading], now: float, hold_s: float, latched: bool) -> int:
+    """How likely someone is in the room, 0-100, from motion only (see the module notes).
+
+    Not scaled by packet rate or link health: a weak link must never make a room with motion look
+    less occupied. Link problems are reported separately (link_health, UNKNOWN)."""
     if track.state == "MOTION":
         top = max((r.score or 0.0) for r in usable)
-        base = 60 + 15 * min(2.0, max(0.0, top - 1.0))  # 60 at the threshold, 90 at 3x
-    elif track.state == "POSSIBLE":
-        if track.last_evidence is None:
-            base = 50.0
-        else:  # fades from 75 toward 50 over the hold
-            base = 75 - 25 * min(1.0, (now - track.last_evidence) / hold_s)
-    else:  # NO_DETECTION: grows with how long every link has been quiet beyond the hold
-        quiet = now - (track.quiet_since or now)
-        base = 55 + 35 * min(1.0, max(0.0, quiet - hold_s) / hold_s)
-    pct = int(round(base * _quality(readings)))
-    if any(r.online() and not r.healthy() for r in readings):
-        pct = min(pct, 49)  # a late heartbeat or weak link forces low (Req 8.11)
-    return max(0, min(100, pct))
+        return int(round(90 + 9 * min(1.0, max(0.0, top - 1.0) / 2.0)))  # 90 at the threshold, 99 at 3x
+    if track.last_evidence is not None and (latched or now - track.last_evidence < hold_s):
+        faded = 90 - (90 - LATCH_FLOOR_PCT) * min(1.0, (now - track.last_evidence) / hold_s)
+        return int(round(faded))  # 90 right after motion, LATCH_FLOOR_PCT from the end of the hold on
+    if track.state == "NO_DETECTION":
+        quiet = now - (now if track.quiet_since is None else track.quiet_since)
+        extra = min(1.0, max(0.0, quiet - hold_s) / hold_s)
+        return int(round(BASELINE_PCT - (BASELINE_PCT - QUIET_PCT) * extra))
+    return BASELINE_PCT  # watched, no motion, not yet quiet for the whole hold
 
 
 def _entry(track: RoomTrack, state: str, pct: int, readings: list[LinkReading], *, calibrated: bool = True,

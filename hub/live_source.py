@@ -247,7 +247,8 @@ class LiveSource(Broadcaster):
         readings = self._readings(now)
         for room_id, track in self._tracks.items():
             room_readings = [readings[rx] for rx in self.plan.receivers_in(room_id) if rx in readings]
-            self._entries[room_id] = room_engine.update(track, room_readings, now, self.hold_s)
+            latch_after = None if self._alarm_at is None else self._alarm_at - room_engine.PRE_ALARM_S
+            self._entries[room_id] = room_engine.update(track, room_readings, now, self.hold_s, latch_after)
         self._health = self._health_msg(readings, now)
         if self._alarm_at is not None:
             self._crew_msg, self._health["tag_faults"] = self._crew(now, readings)

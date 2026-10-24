@@ -137,3 +137,63 @@ def test_motion_last_seen_is_the_last_motion_not_the_last_packet():
     _, t = run(track, [[motion()]] * 3)
     out, _ = run(track, [[quiet()]] * 5, t0=t)
     assert out[-1]["last_seen"] == 2.0
+
+
+# --- presence likelihood and the incident latch ----------------------------------------------------
+
+MOTION_TAIL = re.MOTION_TICKS[1] - 1
+
+
+def run_incident(track, steps, alarm_at=0.0, t0=0.0, dt=1.0):
+    out, t = [], t0
+    for readings in steps:
+        out.append(re.update(track, readings, t, HOLD, latch_after=alarm_at - re.PRE_ALARM_S))
+        t += dt
+    return out, t
+
+
+def test_a_still_room_never_reads_above_ten_percent():
+    out, _ = run(RoomTrack("R1"), [[quiet(pps=50), quiet("RX2", pps=48)]] * int(3 * HOLD))
+    assert max(e["confidence_pct"] for e in out) <= re.BASELINE_PCT
+    assert out[-1]["state"] == "NO_DETECTION" and out[-1]["confidence_pct"] <= re.QUIET_PCT
+
+
+def test_motion_reads_high_even_at_the_relay_rate_of_50_per_second():
+    out, _ = run(RoomTrack("R1"), [[motion(pps=50)]] * 3)
+    assert out[-1]["state"] == "MOTION" and out[-1]["confidence_pct"] >= 90
+    assert out[-1]["confidence_band"] == "high"
+
+
+def test_motion_once_during_an_incident_keeps_the_room_flagged_until_the_end():
+    track = RoomTrack("R1")
+    out, t = run_incident(track, [[quiet()]] * 5 + [[motion()]] * 2)
+    assert out[-1]["state"] == "MOTION"
+    out, _ = run_incident(track, [[quiet()]] * int(10 * HOLD), t0=t)  # long after the hold
+    out = out[MOTION_TAIL:]  # the anti-flicker window keeps MOTION for a tick or two
+    assert all(e["state"] == "POSSIBLE" for e in out)
+    assert min(e["confidence_pct"] for e in out) >= re.LATCH_FLOOR_PCT
+    assert out[-1]["last_seen"] is not None  # "Motion last seen ..." stays on the tile
+
+
+def test_a_single_motion_tick_is_not_lost():
+    """One tick of motion is below the anti-flicker rule for MOTION, but it is still evidence."""
+    track = RoomTrack("R1")
+    out, t = run_incident(track, [[quiet()]] * 5 + [[motion()]] + [[quiet()]] * 3)
+    assert out[-1]["state"] == "POSSIBLE" and out[-1]["confidence_pct"] >= 80
+    out, _ = run_incident(track, [[quiet()]] * int(5 * HOLD), t0=t)
+    assert out[-1]["state"] == "POSSIBLE"
+
+
+def test_motion_long_before_the_alarm_does_not_latch():
+    track = RoomTrack("R1")
+    _, t = run(track, [[motion()]] * 3)  # setting up the boards, long before the alarm
+    _, t = run(track, [[quiet()]] * int(re.PRE_ALARM_S + 3 * HOLD), t0=t)
+    out, _ = run_incident(track, [[quiet()]] * 5, alarm_at=t, t0=t)
+    assert out[-1]["state"] == "NO_DETECTION"
+
+
+def test_outside_an_incident_the_room_still_settles_after_the_hold():
+    track = RoomTrack("R1")
+    _, t = run(track, [[motion()]] * 3)
+    out, _ = run(track, [[quiet()]] * int(3 * HOLD), t0=t)
+    assert out[-1]["state"] == "NO_DETECTION"

@@ -156,3 +156,29 @@ def test_a_real_gap_after_the_reset_is_still_counted():
     for seq in [10, 11, 15]:  # 12-14 genuinely missing
         hub.feed_line(csi_line(seq, [20] * 64), 1.0, port="COM3")
     assert snapshot(hub, 1.1)["lost"] == 3
+
+
+def test_one_packet_gain_glitches_do_not_look_like_motion_but_are_counted():
+    """Real captures show about one packet in 350 arriving ~3x too strong on every subcarrier."""
+    hub = Hub()
+    rng = random.Random(5)
+    seen_motion = False
+    for i in range(1200):
+        amps = [20 + rng.randint(0, 1) for _ in range(64)]
+        if i % 120 == 60:
+            amps = [a * 3 for a in amps]  # a glitch packet
+        hub.feed_line(csi_line(i, amps), i * 0.01)
+        if i % 10 == 0 and i > 150:
+            seen_motion |= snapshot(hub, i * 0.01)["state"] == "motion"
+    assert not seen_motion
+    assert snapshot(hub, 12.0)["glitches"] >= 8
+
+
+def test_a_sustained_disturbance_is_still_motion_with_the_glitch_filter():
+    hub = Hub()
+    now = feed_steady(hub, 0, 150)
+    assert snapshot(hub, now)["state"] == "quiet"  # learn the quiet baseline first
+    rng = random.Random(6)
+    for i in range(100):
+        hub.feed_line(csi_line(150 + i, [20 + rng.randint(-12, 25) for _ in range(64)]), now + i * 0.01)
+    assert snapshot(hub, now + 1.0)["state"] == "motion"

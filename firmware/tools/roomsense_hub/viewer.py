@@ -39,6 +39,7 @@ NO_SIGNAL_AFTER_S = 2.0
 WEAK_RSSI_DBM = -85   # below this the link is too weak to judge
 WEAK_MEAN_AMP = 4.0   # average subcarrier strength below this is basically no signal
 WEAK_ACTIVITY = 0.2   # a real room never wobbles by exactly nothing; flat means blocked or dead
+GLITCH_FRACTION = 0.4 # a packet whose overall strength is this far from typical is counted as a glitch
 
 
 class NodeView:
@@ -47,6 +48,9 @@ class NodeView:
     def __init__(self, node_id: str):
         self.node_id = node_id
         self.window: deque[tuple[int, ...]] = deque(maxlen=WINDOW)
+        self.recent: deque[tuple[int, ...]] = deque(maxlen=5)
+        self.means: deque[float] = deque(maxlen=21)
+        self.glitches = 0
         self.pending: list[list[int]] = []
         self.trackers: dict[str, SequenceTracker] = {}
         self.times: deque[float] = deque(maxlen=400)
@@ -60,7 +64,18 @@ class NodeView:
 
     # --- feeding -------------------------------------------------------------
     def add_csi(self, rec: CsiRecord, now: float) -> None:
-        self.window.append(rec.amplitudes)
+        # Single packets sometimes arrive with every subcarrier about 3x too strong (the receiver's
+        # gain setting, which the classic ESP32 does not report). A 5-packet median per subcarrier
+        # removes those one-packet spikes without hiding real, sustained motion.
+        self.recent.append(rec.amplitudes)
+        self.window.append(tuple(int(statistics.median(col)) for col in zip(*self.recent)))
+        live = [a for a in rec.amplitudes if a]
+        mean = statistics.mean(live) if live else 0.0
+        if len(self.means) >= 11:
+            typical = statistics.median(self.means)
+            if typical > 0 and abs(mean - typical) > GLITCH_FRACTION * typical:
+                self.glitches += 1
+        self.means.append(mean)
         self.pending.append(list(rec.amplitudes))
         if len(self.pending) > 600:
             del self.pending[:-600]
@@ -143,6 +158,7 @@ class NodeView:
             "rate": rate,
             "lost": lost,
             "dup": dup,
+            "glitches": self.glitches,
             "rssi": self.rssi,
             "state": self.state,
             "activity": activity,
@@ -191,6 +207,8 @@ class Hub:
                 if node is not None:
                     node.trackers.clear()
                     node.window.clear()
+                    node.recent.clear()
+                    node.means.clear()
                     node.times.clear()
                     node.pending.clear()
 
@@ -423,7 +441,7 @@ function makeCard(id) {
   head.append(title, pill, badge, sub, reset);
   const stats = el('div', 'stats');
   const s = {};
-  for (const [k, label] of [['rate','CSI lines / s'],['pps','measured pps (board)'],['lost','packets lost'],['dup','repeats'],['rssi','RSSI dBm'],['act','activity'],['heap','free heap'],['drops','queue drops'],['up','uptime']]) {
+  for (const [k, label] of [['rate','CSI lines / s'],['pps','measured pps (board)'],['lost','packets lost'],['dup','repeats'],['glitch','glitch packets'],['rssi','RSSI dBm'],['act','activity'],['heap','free heap'],['drops','queue drops'],['up','uptime']]) {
     s[k] = stat(label); stats.append(s[k].d);
   }
   const l1 = el('div', 'label', 'Signal strength per subcarrier (up the side) over time (newest on the right). Brighter = stronger.');
@@ -449,6 +467,7 @@ function update(n) {
   c.badge.className = 'badge b-' + n.state;
   c.s.rate.v.textContent = fmt(n.rate); c.s.pps.v.textContent = fmt(n.measuredPps);
   c.s.lost.v.textContent = fmt(n.lost); c.s.dup.v.textContent = fmt(n.dup);
+  c.s.glitch.v.textContent = fmt(n.glitches);
   c.s.rssi.v.textContent = fmt(n.rssi); c.s.act.v.textContent = fmt(n.activity, 2);
   c.s.heap.v.textContent = n.freeHeap === null ? '-' : Math.round(n.freeHeap / 1024) + ' KB';
   c.s.drops.v.textContent = fmt(n.drops);

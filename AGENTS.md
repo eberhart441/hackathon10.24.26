@@ -12,7 +12,7 @@ The earlier health-wearable plan is cancelled.
 
 - **Never clear a room.** "No motion detected" is not "empty". UI text and docs use "Search priority" and "Motion last seen", never "Clear" or "Empty, confirmed".
 - **Detect, never identify.** No identity of any kind. Room-level detail at most.
-- **Privacy:** raw CSI never leaves a sensor node; no MAC addresses, device identifiers, or phone sniffing; incident data (trails, logs) is stored only while an incident is open.
+- **Privacy:** raw CSI goes only to the hub laptop over USB, stays in memory there, and is never stored (except by the Training_Tool) or forwarded; only room-level state reaches the dashboard. No occupant MAC addresses, device identifiers, or phone sniffing (our own boards' MACs stay on the hub); incident data (trails, logs) is stored only while an incident is open.
 - **Do not overclaim.** No claims of still-body (breathing) detection, identification, or meter-level position. Label anything experimental as such.
 - **Consent:** demo footage and test data use consenting teammates only, in a mock room.
 - **No secrets in git.** WiFi credentials, tokens, and keys go in git-ignored files; commit an example file instead.
@@ -26,7 +26,7 @@ The earlier health-wearable plan is cancelled.
 - Keep decision logic (zone fusion, calibration, room state machine, flag rule, trails, packet encode/decode) as **pure functions** separate from hardware I/O, so it can be unit- and property-tested on the host (Python + Hypothesis).
 - Test privacy invariants: outbound data has no identifier fields and nothing finer than room level; no incident data is stored when no incident is open.
 - A room never becomes EXITED without a doorway-crossing event; trails only move between adjacent rooms.
-- Raw CSI streaming to the Pi is a dev-only debug mode, off by default, never part of the demo or production path.
+- Receivers stream raw CSI to the hub laptop (HUB mode) in the demo. Nothing that leaves the hub (WebSocket, REST, logs) may contain raw CSI, activity numbers, or MAC addresses; tests check this.
 - ESP32 nodes: the team's boards are **ESP32-C3** (CSI is supported per esp-csi; use `idf.py set-target esp32c3`). Buy the same model for any extra boards so all nodes match. Firmware is C (ESP-IDF) built on Espressif's esp-csi `csi_send` / `csi_recv` examples.
 - Prefer small, reviewable changes. Update `CONTEXT.md` (decisions, open questions, Kiro usage log) when something is decided.
 

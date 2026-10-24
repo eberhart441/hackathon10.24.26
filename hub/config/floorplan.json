@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "units": "m",
+  "floors": [
+    {
+      "id": "F1",
+      "name": "Floor 1",
+      "level": 0,
+      "rooms": [
+        {
+          "id": "R1",
+          "name": "Room 101",
+          "simulated": false,
+          "polygon": [[0, 0], [3.9624, 0], [3.9624, 2.8448], [0, 2.8448]],
+          "doors": [{ "edge": 3, "offset": 1.9558, "width": 0.8128, "swing": "in", "hinge": "end" }],
+          "furniture": [],
+          "crewSlot": [3.5, 0.4]
+        },
+        {
+          "id": "R2",
+          "name": "Storage",
+          "simulated": true,
+          "polygon": [[3.96, 0], [7.16, 0], [7.16, 2.84], [3.96, 2.84]],
+          "doors": [{ "edge": 0, "offset": 0.3, "width": 0.91, "swing": "in" }],
+          "furniture": [{ "kind": "shelf", "x": 6.66, "y": 0.6, "w": 0.4, "d": 1.8, "h": 1.8 }],
+          "crewSlot": [4.4, 2.4]
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "name": "Floor 2",
+      "level": 1,
+      "rooms": [
+        {
+          "id": "R3",
+          "name": "Office",
+          "simulated": true,
+          "polygon": [[0, 0], [3.5, 0], [3.5, 3.0], [0, 3.0]],
+          "doors": [{ "edge": 2, "offset": 0.3, "width": 0.91, "swing": "in" }],
+          "furniture": [{ "kind": "desk", "x": 0.3, "y": 0.3, "w": 1.6, "d": 0.8, "h": 0.75 }],
+          "crewSlot": [3.0, 0.4]
+        },
+        {
+          "id": "R4",
+          "name": "Dorm room",
+          "simulated": true,
+          "polygon": [[3.5, 0], [7.16, 0], [7.16, 3.0], [3.5, 3.0]],
+          "doors": [{ "edge": 2, "offset": 2.4, "width": 0.91, "swing": "in" }],
+          "furniture": [{ "kind": "bed", "x": 5.0, "y": 0.2, "w": 2.0, "d": 1.0, "h": 0.5 }],
+          "crewSlot": [3.9, 0.4]
+        },
+        {
+          "id": "R5",
+          "name": "Restroom",
+          "simulated": true,
+          "polygon": [[0, 4.4], [2.5, 4.4], [2.5, 6.4], [0, 6.4]],
+          "doors": [{ "edge": 0, "offset": 0.8, "width": 0.91, "swing": "in" }],
+          "furniture": [],
+          "crewSlot": [0.4, 6.0]
+        },
+        {
+          "id": "R6",
+          "name": "Lounge",
+          "simulated": true,
+          "polygon": [[2.5, 4.4], [7.16, 4.4], [7.16, 6.4], [2.5, 6.4]],
+          "doors": [{ "edge": 0, "offset": 1.2, "width": 1.2, "swing": "in" }],
+          "furniture": [{ "kind": "sofa", "x": 4.6, "y": 5.5, "w": 2.0, "d": 0.8, "h": 0.8 }],
+          "crewSlot": [6.7, 6.0]
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    { "id": "TX1", "role": "TX", "room": "R1", "pos": [0, 2.8438], "h": 1 },
+    { "id": "TX2", "role": "TX", "room": "R1", "pos": [3.9624, 0], "h": 1 },
+    { "id": "RX1", "role": "RX", "room": "R1", "pos": [3.9624, 1.4204], "h": 1 },
+    { "id": "RX2", "role": "RX", "room": "R1", "pos": [1.9812, 0], "h": 1 },
+    { "id": "RX3", "role": "RX", "room": "R1", "pos": [0, 1.4204], "h": 1 },
+    { "id": "RX4", "role": "RX", "room": "R1", "pos": [1.9812, 2.8438], "h": 1 }
+  ],
+  "links": [
+    { "tx": "TX1", "rx": "RX1" },
+    { "tx": "TX1", "rx": "RX2" },
+    { "tx": "TX2", "rx": "RX3" },
+    { "tx": "TX2", "rx": "RX4" }
+  ],
+  "_notes": "Hand-edited. Meters, origin bottom-left of each floor, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position. F2 rooms are SIMULATED. Furniture x/y is the rectangle's min corner; w along x, d along y.",
+  "_source": "Room R1 from floor plans/conference_room.dxf (inches; DXF size 3.9624 x 2.8956 m; overrides: height=9ft4in; DXF area label 123.5 SF; boards from firmware/tools/layouts/demo-room.json) by tools/dxf_to_floorplan.py on 2026-10-24."
+}

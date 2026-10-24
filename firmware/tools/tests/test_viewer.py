@@ -174,6 +174,21 @@ def test_one_packet_gain_glitches_do_not_look_like_motion_but_are_counted():
     assert snapshot(hub, 12.0)["glitches"] >= 8
 
 
+def test_a_lasting_gain_step_is_not_motion():
+    """The receiver's gain can change and stay changed; every subcarrier scales together."""
+    hub = Hub()
+    now = feed_steady(hub, 0, 150)
+    assert snapshot(hub, now)["state"] == "quiet"
+    rng = random.Random(7)
+    seen_motion = False
+    for i in range(300):
+        amps = [round((20 + rng.randint(0, 1)) * 1.6) for _ in range(64)]
+        hub.feed_line(csi_line(150 + i, amps), now + i * 0.01)
+        if i % 10 == 0:
+            seen_motion |= snapshot(hub, now + i * 0.01)["state"] == "motion"
+    assert not seen_motion
+
+
 def test_a_sustained_disturbance_is_still_motion_with_the_glitch_filter():
     hub = Hub()
     now = feed_steady(hub, 0, 150)

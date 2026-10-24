@@ -65,7 +65,7 @@ Existing tools fall short:
 
 ## Privacy Rules (hard constraints — enforce in code, tests, and hooks)
 
-1. **Raw CSI never leaves a sensor node.** Nodes send only processed motion scores.
+1. **Raw CSI goes only to the hub laptop, over a USB cable, and is never stored or forwarded.** Receivers stream raw CSI to the hub (HUB mode, the spec's Must path) because on-node processing (EDGE mode) is not built yet. On the hub it stays in memory only; nothing derived from it but room-level state reaches the dashboard, and only the Training_Tool writes it to disk (consenting teammates, allow-listed installers). Decided 2026-10-24; replaces "raw CSI never leaves a sensor node".
 2. **No MAC addresses, device identifiers, or phone sniffing.** Ever.
 3. **Room-level detail at most.** No positions within a room, and especially none inside restroom stalls.
 4. **No identity of any kind.**
@@ -132,7 +132,7 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - **3 ESP32 boards:** one **transmitter** that broadcasts at a steady packet rate, and **two receivers** that pick up those packets and produce CSI. Each receiver connects to the laptop by USB serial. <!-- TODO: confirm all 3 boards support CSI (ESP32 classic and S3 do) -->
 - **Laptop replaces the Raspberry Pi and touchscreen** for processing, server, and dashboard. The alarm trigger is a button on the dashboard (or a key press) instead of a Pi GPIO button.
 - **Two links** (transmitter -> receiver 1, transmitter -> receiver 2): one placed across the **doorway** (entry/exit tripwire), one covering the **room interior**.
-- **Demo room:** the team's small conference room with a single entrance. Measured floor plan: **13 ft x 9 ft 4 in** (about 3.96 m x 2.84 m, roughly 121 sq ft / 11.3 m², diagonal about 16 ft / 4.9 m). It is described as "square" but is actually a rectangle (about 1.4 : 1); draw the floor plan to these dimensions. The single door is **3 ft wide**, located **in a corner of the 9 ft 4 in (short) wall**. Ceiling height is not needed (CSI is mostly horizontal); what matters is node mounting height (see layout below). <!-- TODO: where the table/furniture sits, door swing direction, wall material -->
+- **Demo room:** the team's small conference room with a single entrance. Measured floor plan: **13 ft x 9 ft 4 in** (about 3.96 m x 2.84 m, roughly 121 sq ft / 11.3 m², diagonal about 16 ft / 4.9 m). It is described as "square" but is actually a rectangle (about 1.4 : 1); draw the floor plan to these dimensions. The single door is **32 in wide** (confirmed 2026-10-24; `floor plans/conference_room.dxf` agrees on the door but draws the room 9 ft 6 in deep, which is 2 in too deep; the converter applies the 9 ft 4 in override), located **in a corner of the 9 ft 4 in (short) wall**. Ceiling height is not needed (CSI is mostly horizontal); what matters is node mounting height (see layout below). <!-- TODO: where the table/furniture sits, door swing direction, wall material -->
 - **What the data is:** CSI is amplitude (and phase) per subcarrier over time, per link. It is **not** a 3D position. With one transmitter and two receivers we get motion per link and zone-level inference (doorway, interior), not x/y/z coordinates. "Position over time" in the dashboard means **zone / room state over time**.
 - **Dashboard (floor plans + position over time):** we build it ourselves during the hackathon, vibe-coded and deliberately simple. It uses floor plans the team already drew, and shows people entering and leaving a room and the room's current state. There is no dependency on any outside software.
 - **Hybrid demo:** the real room is live. Any other rooms on the floor plan are simulated by the simulator and must be **visibly labeled "SIMULATED"** on screen.
@@ -147,7 +147,7 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - Keep the doorway and interior links as separate lines, and keep antennas clear of metal, the table, and the whiteboard where possible.
 
 **Decisions and open questions for this setup**
-- Receivers should compute the motion score **on the ESP32** and send only scores to the laptop, to keep Privacy Rule 1 (raw CSI never leaves a node). Raw CSI streaming stays a dev-only debug mode. <!-- TODO: team to confirm; if the laptop gets raw CSI, change Privacy Rule 1 to say so honestly -->
+- Receivers stream raw CSI amplitudes to the laptop over USB (HUB mode). Privacy Rule 1 was reworded on 2026-10-24 to say so honestly; on-node scoring (EDGE mode) remains a later option.
 - Transmit with **ESP-NOW broadcast on a fixed channel** (no router or hotspot needed), using an OFDM/HT rate so CSI is produced. Start from Espressif's esp-csi send/receive examples. Pick the least busy 2.4 GHz channel at the venue.
 - Receivers talk to the laptop over **USB serial**, not WiFi, so reporting doesn't use the radio that is sensing.
 - Put the transmitter on a battery pack to demo "wall power cut, still working".
@@ -178,6 +178,12 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - **esp-csi code:** copy the few files we need (`csi_send`, `csi_recv`, the gain-control component) into `firmware/` with the Apache-2.0 license kept, instead of a git submodule. Credit Espressif in "Used vs. Built".
 - **Dev MCP:** use ESP-IDF's built-in `idf.py mcp-server` (needs ESP-IDF v6.0+ and the `mcp` feature; see Firmware Design). The other MCP options are optional and listed there.
 
+**Decided (live data, 2026-10-24)**
+- **Raw CSI to the laptop is allowed** (HUB mode) and Privacy Rule 1 is reworded to match. The existing in-room motion map (`locate.py`, `rs-view --layout`) stays as is.
+- **Receiver gain jumps are corrected on the hub:** each packet is scaled to the link's fixed reference level before measuring activity (`firmware/tools/roomsense_hub/activity.py`), so a classic-ESP32 gain change no longer reads as motion.
+- **Room 101 is 13 ft x 9 ft 4 in with a 32 in door.** `tools/dxf_to_floorplan.py` builds the dashboard floor plan from `floor plans/conference_room.dxf` with a `--height 9ft4in` override (the DXF is drawn 2 in too deep), and places the six boards from `firmware/tools/layouts/demo-room.json`.
+- **Live dashboard data:** `tools/live_hub.py` reads the receivers (or `--simulate-boards` / `--replay`) through `roomsense_hub` and a rule-based room state engine (`hub/room_engine.py`). There is no trained model yet; confidence is a heuristic and must be described that way. Rooms are matched by the floor plan's node list, not the boards' `room_id`.
+
 **Defaults the team has not objected to** (revisit if wrong)
 - v1 keeps only the first 64 CSI values per packet (the legacy training field) and turns each into one amplitude. The ML teammate should confirm this is enough for the model.
 
@@ -187,7 +193,6 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - Always-on minimal "motion last seen" mode vs. alarm-triggered only (see the design tradeoff above).
 - Stillness timer value for the demo vs. the 3-minute figure in the pitch.
 - Who owns what across the four people.
-- How raw CSI reaching the laptop squares with Privacy Rule 1, and how training recordings are handled.
 - Whether the dashboard shows a headcount or only events and room state.
 - Whether other rooms on the floor plan are simulated and labeled.
 
@@ -350,4 +355,4 @@ Running notes (add dated bullets as things happen):
 - **Time:** get the sensing → state → dashboard loop working before polishing anything.
 - **Disqualification risks:** missing `/.kiro`, `.kiro` in `.gitignore`, thin Kiro usage, video over 3:00, copyrighted music/logos, repo without run instructions.
 - **Video privacy:** consenting teammates only, mock rooms only.
-- **Privacy rule vs. dev workflow:** Privacy Rule 1 says raw CSI never leaves a node, but M1 and the serial-monitor MCP plan involve streaming CSI to the Pi/Kiro for tuning. Treat that as a dev-only debug mode that is off by default and never part of the demo or production path, and say so in the write-up. <!-- TODO: team to confirm -->
+- **Privacy rule wording:** resolved 2026-10-24. Privacy Rule 1 now says raw CSI goes to the hub laptop over USB, stays in memory, and only room-level state reaches the dashboard. Keep the pitch and write-up consistent with that wording.

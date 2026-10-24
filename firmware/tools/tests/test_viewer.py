@@ -87,3 +87,52 @@ def test_the_sample_capture_shows_up():
 
 def test_the_page_never_says_empty():
     assert "empty" not in PAGE.lower().replace("never means a room is empty", "")
+
+
+def test_a_blocked_flat_link_reads_weak_signal_not_quiet():
+    """Covering the antenna makes the numbers go flat. That must not look like a calm room."""
+    hub = Hub()
+    now = feed_steady(hub, 0, 150)
+    assert snapshot(hub, now)["state"] == "quiet"
+    for i in range(120):  # signal collapses to a constant trickle
+        hub.feed_line(csi_line(150 + i, [1] * 64), now + i * 0.01)
+    assert snapshot(hub, now + 1.3)["state"] == "weak"
+
+
+def test_a_very_low_rssi_reads_weak_signal():
+    hub = Hub()
+    rng = random.Random(3)
+    for i in range(150):
+        amps = [20 + rng.randint(0, 3) for _ in range(64)]
+        hub.feed_line(format_record(CsiRecord("RX1", TX, i, i * 10_000, -92, 11, tuple(amps))), i * 0.01)
+    assert snapshot(hub, 1.5)["state"] == "weak"
+
+
+def test_weak_signal_does_not_poison_the_learned_baseline():
+    hub = Hub()
+    now = feed_steady(hub, 0, 150)
+    before = hub.nodes["RX1"].baseline
+    for i in range(120):
+        hub.feed_line(csi_line(150 + i, [1] * 64), now + i * 0.01)
+    snapshot(hub, now + 1.3)
+    assert hub.nodes["RX1"].baseline == before
+
+
+def test_two_receivers_are_tracked_independently():
+    hub = Hub()
+    rng = random.Random(4)
+    for i in range(150):
+        quiet = [20 + rng.randint(0, 1) for _ in range(64)]
+        hub.feed_line(csi_line(i, quiet, node="RX1"), i * 0.01)
+        hub.feed_line(csi_line(i, quiet, node="RX2"), i * 0.01)
+    assert [n["id"] for n in json.loads(hub.snapshot_json(1.5))["nodes"]] == ["RX1", "RX2"]
+    for i in range(100):  # only RX2 sees a disturbance
+        hub.feed_line(csi_line(150 + i, [20 + rng.randint(0, 1) for _ in range(64)], node="RX1"), 1.5 + i * 0.01)
+        hub.feed_line(csi_line(150 + i, [rng.randint(5, 60) for _ in range(64)], node="RX2"), 1.5 + i * 0.01)
+    nodes = {n["id"]: n for n in json.loads(hub.snapshot_json(2.5))["nodes"]}
+    assert nodes["RX1"]["state"] == "quiet"
+    assert nodes["RX2"]["state"] == "motion"
+
+
+def test_the_page_has_the_room_overview_and_the_weak_signal_label():
+    assert "drawRoom" in PAGE and "drawTimeline" in PAGE and "WEAK SIGNAL" in PAGE

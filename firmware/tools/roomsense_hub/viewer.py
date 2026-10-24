@@ -36,6 +36,9 @@ MIN_WINDOW = 30       # packets needed before we show an activity number
 TICK_S = 0.1
 OFFLINE_AFTER_S = 10.0
 NO_SIGNAL_AFTER_S = 2.0
+WEAK_RSSI_DBM = -85   # below this the link is too weak to judge
+WEAK_MEAN_AMP = 4.0   # average subcarrier strength below this is basically no signal
+WEAK_ACTIVITY = 0.2   # a real room never wobbles by exactly nothing; flat means blocked or dead
 
 
 class NodeView:
@@ -86,6 +89,13 @@ class NodeView:
                 spreads.append(statistics.pstdev(column))
         return statistics.mean(spreads) if spreads else None
 
+    def mean_amplitude(self) -> float | None:
+        """Average strength of the most recent packet over subcarriers that carry signal."""
+        if not self.window:
+            return None
+        live = [a for a in self.window[-1] if a]
+        return statistics.mean(live) if live else 0.0
+
     def update_state(self, now: float) -> tuple[float | None, float | None]:
         activity = self.activity()
         if not self.times or now - self.times[-1] > NO_SIGNAL_AFTER_S:
@@ -94,6 +104,12 @@ class NodeView:
         if activity is None:
             self.state = "warming"
             return None, None
+        mean_amp = self.mean_amplitude()
+        # A blocked or very weak link looks flat, which must never be read as a calm room.
+        if (self.rssi is not None and self.rssi < WEAK_RSSI_DBM) or (mean_amp or 0) < WEAK_MEAN_AMP \
+                or activity < WEAK_ACTIVITY:
+            self.state = "weak"
+            return activity, None
         if self.baseline is None:
             self.baseline = activity
         threshold = self.baseline * 1.8 + 0.4
@@ -330,6 +346,7 @@ PAGE = r"""<!doctype html>
   .badge { padding: 4px 14px; border-radius: 8px; font-weight: 700; letter-spacing: .5px; }
   .b-motion { background: #ff9f1c; color: #1a1200; } .b-quiet { background: #1f4d36; color: #9ff0c4; }
   .b-warming { background: #2a3644; color: #cdd9e5; } .b-nosignal { background: #4a1a1a; color: #ff8a80; }
+  .b-weak { background: #5c3a00; color: #ffd28a; }
   .stats { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 6px 0 12px; }
   .stat b { display: block; font-size: 20px; } .stat span { color: #9fb0c0; font-size: 12px; }
   canvas { width: 100%; max-width: 940px; border-radius: 6px; background: #0b0f14; display: block; }
@@ -346,10 +363,25 @@ PAGE = r"""<!doctype html>
 not the detection model, and &ldquo;quiet&rdquo; never means a room is empty. Walk between the two boards and watch the picture change.</p>
 <div id="errors"></div>
 <div id="waiting">Waiting for data from the receiver&hellip;</div>
+<div class="card" id="overview">
+  <div class="title">Room overview</div>
+  <div class="label">Schematic of the demo room (13 ft x 9 ft 4 in) with the planned node layout. Each line is a radio link from the
+  transmitter (TX) to a receiver; its colour is what that link sees. If your boards are placed differently, edit LAYOUT in this page's script.</div>
+  <canvas id="room" width="800" height="290"></canvas>
+  <div class="label">Activity on every link, last 30 seconds (a walker should disturb one link and then the other).</div>
+  <canvas id="timeline" width="800" height="120"></canvas>
+</div>
 <div id="nodes"></div>
 <script>
 const W = 800, ROWS = 64, ROW_PX = 3, H = ROWS * ROW_PX, AH = 90, HISTORY = 300;
 const cards = {};
+const STATE_LABEL = {motion: 'MOTION', quiet: 'QUIET', warming: 'WARMING UP', weak: 'WEAK SIGNAL', nosignal: 'NO SIGNAL'};
+const STATE_COLOUR = {motion: '#ff9f1c', quiet: '#3ddc84', warming: '#6b7c8f', weak: '#ff6b6b', nosignal: '#ff6b6b'};
+const LINE_COLOURS = ['#5be49b', '#6cb6ff', '#e3a8ff', '#ffd166'];
+// Planned layout, in feet from the top-left corner of the room (x along the 13 ft side, y along the 9 ft 4 in side).
+// The door is in the top-left corner of the left (short) wall. TX is on the bottom wall; the first receiver is across
+// the entry strip (the doorway link); the second is near the far end (the interior link).
+const LAYOUT = {room: [13, 9.33], tx: [2, 9.33], rx: [[2, 0], [12.5, 1.5]], door: [0, 3]};
 const STOPS = [[13,8,135],[84,2,163],[139,10,165],[185,50,137],[219,92,104],[244,136,73],[254,188,43],[240,249,33]];
 function colour(t) {
   t = Math.max(0, Math.min(1, t)) * (STOPS.length - 1);
@@ -389,7 +421,7 @@ function update(n) {
   c.sub.textContent = n.txMac ? 'listening to ' + n.txMac : '';
   c.pill.textContent = n.online ? 'ONLINE' : (n.hbAge === null ? 'NO HEARTBEAT YET' : 'OFFLINE');
   c.pill.className = 'pill ' + (n.online ? 'ok' : 'bad');
-  const labels = {motion: 'MOTION', quiet: 'QUIET', warming: 'WARMING UP', nosignal: 'NO SIGNAL'};
+  const labels = STATE_LABEL;
   c.badge.textContent = labels[n.state] || n.state;
   c.badge.className = 'badge b-' + n.state;
   c.s.rate.v.textContent = fmt(n.rate); c.s.pps.v.textContent = fmt(n.measuredPps);
@@ -430,12 +462,58 @@ function update(n) {
   c.tags.textContent = n.tags.length ? 'Tags heard: ' + n.tags.map(t => `${t.id} (${t.heard}/s, mean ${t.mean} dBm)`).join(', ') : '';
 }
 
+function drawRoom(nodes) {
+  const cv = document.getElementById('room'), g = cv.getContext('2d');
+  const S = 27, X0 = (cv.width - LAYOUT.room[0] * S) / 2, Y0 = 18;
+  const P = p => [X0 + p[0] * S, Y0 + p[1] * S];
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.strokeStyle = '#4b5d70'; g.lineWidth = 3; g.strokeRect(X0, Y0, LAYOUT.room[0] * S, LAYOUT.room[1] * S);
+  const d0 = P([0, LAYOUT.door[0]]), d1 = P([0, LAYOUT.door[1]]);
+  g.strokeStyle = '#0b0f14'; g.lineWidth = 6; g.beginPath(); g.moveTo(d0[0], d0[1] + 2); g.lineTo(d1[0], d1[1] - 2); g.stroke();
+  g.strokeStyle = '#6cb6ff'; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(d0[0], d0[1]); g.lineTo(d1[0], d1[1]); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#6cb6ff'; g.font = '12px system-ui'; g.fillText('door', d0[0] - 34, (d0[1] + d1[1]) / 2 + 4);
+  const tx = P(LAYOUT.tx);
+  nodes.forEach((n, i) => {
+    const pos = LAYOUT.rx[i]; if (!pos) return;
+    const rx = P(pos), col = STATE_COLOUR[n.state] || '#6b7c8f';
+    g.strokeStyle = col; g.lineWidth = n.state === 'motion' ? 7 : 3;
+    g.setLineDash(n.state === 'weak' || n.state === 'nosignal' ? [8, 6] : []);
+    g.beginPath(); g.moveTo(tx[0], tx[1]); g.lineTo(rx[0], rx[1]); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.beginPath(); g.arc(rx[0], rx[1], 9, 0, 7); g.fill();
+    g.fillStyle = '#e6edf3'; g.font = '13px system-ui'; g.fillText(n.id, rx[0] + 12, rx[1] + 4);
+    g.fillStyle = col; g.fillText(STATE_LABEL[n.state] || n.state, (tx[0] + rx[0]) / 2 + 8, (tx[1] + rx[1]) / 2 - 6);
+  });
+  g.fillStyle = '#e6edf3'; g.fillRect(tx[0] - 8, tx[1] - 8, 16, 16);
+  g.font = '13px system-ui'; g.fillText('TX', tx[0] + 12, tx[1] + 5);
+}
+
+function drawTimeline(nodes) {
+  const cv = document.getElementById('timeline'), g = cv.getContext('2d');
+  g.clearRect(0, 0, cv.width, cv.height);
+  let top = 1;
+  nodes.forEach(n => { const c = cards[n.id]; if (c) for (const p of c.hist) if (p.a && p.a > top) top = p.a; });
+  top *= 1.15;
+  nodes.forEach((n, k) => {
+    const c = cards[n.id]; if (!c) return;
+    g.strokeStyle = LINE_COLOURS[k % LINE_COLOURS.length]; g.lineWidth = 2; g.beginPath(); let on = false;
+    c.hist.forEach((p, i) => {
+      if (p.a === null) return;
+      const x = (i / (HISTORY - 1)) * cv.width, y = cv.height - 6 - (p.a / top) * (cv.height - 14);
+      if (!on) { g.moveTo(x, y); on = true; } else g.lineTo(x, y);
+    });
+    g.stroke();
+    g.fillStyle = g.strokeStyle; g.font = '12px system-ui'; g.fillText(n.id, 8 + k * 60, 14);
+  });
+}
+
 const es = new EventSource('/events');
 es.onmessage = e => {
   const m = JSON.parse(e.data);
   document.getElementById('waiting').style.display = m.nodes.length ? 'none' : 'block';
   document.getElementById('errors').textContent = Object.entries(m.errors).map(([p, msg]) => `Port ${p}: ${msg}`).join('   ');
   m.nodes.forEach(update);
+  drawRoom(m.nodes);
+  drawTimeline(m.nodes);
 };
 es.onerror = () => { document.getElementById('waiting').textContent = 'Lost connection to the viewer. Is rs-view still running?'; document.getElementById('waiting').style.display = 'block'; };
 </script>

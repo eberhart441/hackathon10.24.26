@@ -95,7 +95,7 @@ export interface Door {
   edge: number;
   offset: number;
   width: number;
-  swing?: 'in' | 'out';
+  swing?: 'in' | 'out' | 'none'; // none: an opening with no door leaf (walls-only drawings)
   hinge?: 'start' | 'end'; // which end of the opening the leaf turns on (default start)
 }
 
@@ -123,6 +123,7 @@ export interface FloorDef {
   name: string;
   level?: number;
   rooms: RoomDef[];
+  walls?: Vec2[][]; // wall outlines from the DXF (closed loops); the space between them is wall (even-odd)
 }
 
 export interface NodeDef {

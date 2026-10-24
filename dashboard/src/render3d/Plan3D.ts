@@ -5,6 +5,7 @@ import { h, render } from 'preact';
 import type { Floorplan, RoomDef, Vec2 } from '../types';
 import type { CrewChip, RoomDescriptor, SceneModel } from '../scene/model';
 import { bounds, doorViews, inradiusAt, wallSegments } from '../scene/geometry';
+import { polygonArea } from '../floorplan/validate';
 import { STATE_PATTERN } from '../scene/palette';
 import { RoomLabel } from '../ui/RoomLabel';
 import { contactShadowTexture, dashTexture, patternTexture, simulatedTexture } from './textures';
@@ -195,7 +196,8 @@ export class Plan3D {
     this.group.add(grid);
 
     for (const def of floor.rooms) this.buildRoom(def);
-    this.buildWalls(floor.rooms);
+    if (floor.walls?.length) this.buildDxfWalls(floor.walls);
+    else this.buildWalls(floor.rooms);
     for (const def of floor.rooms) this.buildDoorsAndFurniture(def);
     this.buildNodesAndLinks(plan, floor.rooms);
 
@@ -257,6 +259,26 @@ export class Plan3D {
     this.group.add(label);
 
     this.rooms.set(def.id, { def, floor, rings, ringR, label, labelEl, state: null, greyed: false });
+  }
+
+  // Walls-only DXF: extrude the wall mass itself (largest loop outside, the others as holes), so wall
+  // thickness and door openings are the drawing's.
+  private buildDxfWalls(loops: Vec2[][]) {
+    const [outer, ...holes] = [...loops].sort((a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)));
+    const v = (l: Vec2[]) => l.map(([x, y]) => new THREE.Vector2(x, y));
+    const shape = new THREE.Shape(v(outer));
+    shape.holes = holes.map((l) => new THREE.Path(v(l)));
+    // Shape (x, y) extruded along +z; rotating -90° about x gives world (x, height, -y), as w() does.
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: WALL_H, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const wallMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#E4DED4', roughness: 0.88 }));
+    wallMesh.castShadow = true;
+    wallMesh.receiveShadow = true;
+    const cap = new THREE.ShapeGeometry(shape);
+    cap.rotateX(-Math.PI / 2);
+    cap.translate(0, WALL_H + 0.004, 0);
+    const capMesh = new THREE.Mesh(cap, new THREE.MeshStandardMaterial({ color: '#3B3F46', roughness: 0.6 }));
+    this.group.add(wallMesh, capMesh);
   }
 
   private buildWalls(rooms: RoomDef[]) {

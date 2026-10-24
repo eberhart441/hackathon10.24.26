@@ -176,6 +176,42 @@ describe('scene model examples', () => {
     expect(m.list[0]).toMatchObject({ roomId: 'R9', note: 'Not on floor plan', rank: 1 });
   });
 
+  it('a room with no receiver says so (hub annotation no_sensors)', () => {
+    const r2 = { ...room('R2', 'MOTION'), state: 'UNKNOWN' as const, calibrated: false, last_seen: null, annotation: 'no_sensors' };
+    const m = buildSceneModel(PLAN, storeWith({ roomStates: { ...base, rooms: [r2], ranking: ['R2'] } }), NOW);
+    const o = m.rooms.find((r) => r.id === 'R2')!.occupancy!;
+    expect([o.label, o.annotation, o.rank]).toEqual(['UNKNOWN', 'No sensors in this room', 1]);
+  });
+
+  describe('"You are here": the phone bound to a tag (parent Req 26.4)', () => {
+    const tag = (tag_id: string, over: object = {}) => ({
+      tag_id, location_kind: 'room' as const, room_id: 'HALL', near_rooms: [], confidence_band: 'high' as const,
+      last_heard_s: 1, marker: 'solid' as const, ...over,
+    });
+    const crew = (...tags: ReturnType<typeof tag>[]) => ({ type: 'crew' as const, ts: 0, tags, floor_crew_counts: {} });
+    const rs = { ...base, rooms: [room('R1', 'MOTION')], ranking: ['R1'] };
+
+    it('marks only the bound tag as you, in the room it was located in', () => {
+      const m = buildSceneModel(PLAN, storeWith({ roomStates: rs, crew: crew(tag('E1'), tag('E2', { room_id: 'R1' })) }), NOW, 'E1');
+      expect(m.you).toEqual({ tagId: 'E1', roomIds: ['HALL'], floorId: 'F1', lost: false });
+      expect(m.rooms.find((r) => r.id === 'HALL')!.crew).toMatchObject([{ tagId: 'E1', you: true }]);
+      expect(m.rooms.find((r) => r.id === 'R1')!.crew).toMatchObject([{ tagId: 'E2', you: false }]);
+    });
+
+    it('low confidence stays two rooms, a lost tag stays where it was last heard, nothing without a binding', () => {
+      const near = tag('E1', { location_kind: 'near', room_id: null, near_rooms: ['R1', 'HALL'], confidence_band: 'low' });
+      let m = buildSceneModel(PLAN, storeWith({ roomStates: rs, crew: crew(near) }), NOW, 'E1');
+      expect(m.you!.roomIds).toEqual(['R1', 'HALL']);
+      expect(m.crewChips).toMatchObject([{ tagId: 'E1', you: true }]);
+      const lost = tag('E1', { location_kind: 'lost', room_id: 'R1', marker: 'hollow', last_heard_s: 30 });
+      m = buildSceneModel(PLAN, storeWith({ roomStates: rs, crew: crew(lost) }), NOW, 'E1');
+      expect(m.you).toMatchObject({ roomIds: ['R1'], lost: true });
+      expect(buildSceneModel(PLAN, storeWith({ roomStates: rs, crew: crew(tag('E1')) }), NOW, null).you).toBeNull();
+      const idle = { ...rs, system_state: 'IDLE' as const, rooms: [], ranking: [] };
+      expect(buildSceneModel(PLAN, storeWith({ roomStates: idle, crew: crew(tag('E1')) }), NOW, 'E1').you).toBeNull();
+    });
+  });
+
   it('leaving an incident drops every room and crew entry from the store (Kiro R14.4)', () => {
     let s = emptyStore();
     s = applyMessage(s, { ...base, rooms: [room('R1', 'MOTION')], ranking: ['R1'] }, NOW);

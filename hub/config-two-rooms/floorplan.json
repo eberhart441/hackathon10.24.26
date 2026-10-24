@@ -1,53 +1,98 @@
 {
   "schema": 1,
   "units": "m",
-  "_notes": "Relay-mode demo: TX1 just outside Room 1 in the hallway, on the laptop's USB as the relay gateway. Room 1 has RX2 and RX3 on its back wall; RX1 stands at the far end of the hallway, so hallway motion shows as its own tile instead of hiding inside a room. Meters, origin bottom-left of Room 1, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position. Board positions are approximate (about a foot); the hallway outline is approximate.",
-  "_source": "Rooms from floor plans/walls_only.dxf (inches): two stacked 13 x 9.5 ft rooms with doors on the hallway (left) wall. Hand-entered on 2026-10-24.",
   "floors": [
     {
       "id": "F1",
       "name": "Floor 1",
-      "level": 1,
+      "level": 0,
       "rooms": [
         {
           "id": "R1",
           "name": "Room 1",
           "simulated": false,
-          "polygon": [[0, 0], [3.9624, 0], [3.9624, 2.8956], [0, 2.8956]],
-          "doors": [{"edge": 3, "offset": 2.009, "width": 0.813, "swing": "in", "hinge": "end"}],
+          "polygon": [[3.7338, 5.9436], [7.6962, 5.9436], [7.6962, 8.8392], [3.7338, 8.8392]],
+          "doors": [{ "edge": 3, "offset": 2.0066, "width": 0.8128, "swing": "none" }],
           "furniture": [],
-          "crewSlot": [3.5, 2.5]
+          "crewSlot": [7.1, 6.4]
         },
         {
           "id": "HALL",
           "name": "Hallway",
           "simulated": false,
-          "polygon": [[-2.0, 0], [-0.12, 0], [-0.12, 5.9036], [-2.0, 5.9036]],
-          "doors": [],
+          "polygon": [
+            [0.1143, 0.1143],
+            [3.6195, 0.1143],
+            [3.6195, 11.9634],
+            [12.3063, 11.9634],
+            [12.3063, 21.1074],
+            [0.1143, 21.1074]
+          ],
+          "doors": [
+            { "edge": 1, "offset": 5.9055, "width": 0.8128, "swing": "none" },
+            { "edge": 1, "offset": 8.9154, "width": 0.8128, "swing": "none" }
+          ],
           "furniture": [],
-          "crewSlot": [-1.5, 5.5]
+          "crewSlot": [1.9, 9.6]
         },
         {
           "id": "R2",
-          "name": "Room 2 (no sensors)",
+          "name": "Room 2",
           "simulated": false,
-          "polygon": [[0, 3.008], [3.9624, 3.008], [3.9624, 5.9036], [0, 5.9036]],
-          "doors": [{"edge": 3, "offset": 2.009, "width": 0.813, "swing": "in", "hinge": "end"}],
+          "polygon": [[3.7338, 8.9535], [7.6962, 8.9535], [7.6962, 11.8491], [3.7338, 11.8491]],
+          "doors": [{ "edge": 3, "offset": 2.0066, "width": 0.8128, "swing": "none" }],
           "furniture": [],
-          "crewSlot": [3.5, 5.5]
+          "crewSlot": [7.1, 9.4]
         }
+      ],
+      "walls": [
+        [
+          [12.4206, 11.8491],
+          [7.8105, 11.8491],
+          [7.8105, 8.9535],
+          [7.8105, 8.8392],
+          [7.8105, 5.8293],
+          [3.7338, 5.8293],
+          [3.7338, 0.0],
+          [0.0, 0.0],
+          [0.0, 21.2217],
+          [12.4206, 21.2217]
+        ],
+        [
+          [3.6195, 0.1143],
+          [3.6195, 6.0198],
+          [3.7338, 6.0198],
+          [3.7338, 5.9436],
+          [7.6962, 5.9436],
+          [7.6962, 8.8392],
+          [3.7338, 8.8392],
+          [3.7338, 6.8326],
+          [3.6195, 6.8326],
+          [3.6195, 9.0297],
+          [3.7338, 9.0297],
+          [3.7338, 8.9535],
+          [7.6962, 8.9535],
+          [7.6962, 11.8491],
+          [3.7338, 11.8491],
+          [3.7338, 9.8425],
+          [3.6195, 9.8425],
+          [3.6195, 11.9634],
+          [12.3063, 11.9634],
+          [12.3063, 21.1074],
+          [0.1143, 21.1074],
+          [0.1143, 11.9634],
+          [0.1143, 0.1143]
+        ]
       ]
     }
   ],
   "nodes": [
-    {"id": "TX1", "role": "TX", "room": "HALL", "pos": [-0.5, 0.5], "h": 1},
-    {"id": "RX1", "role": "RX", "room": "HALL", "pos": [-1.0, 5.7], "h": 1},
-    {"id": "RX2", "role": "RX", "room": "R1", "pos": [3.87, 2.72], "h": 1},
-    {"id": "RX3", "role": "RX", "room": "R1", "pos": [3.83, 0.12], "h": 1}
+    { "id": "TX1", "role": "TX", "room": "HALL", "pos": [3.2339, 6.4435], "h": 1 },
+    { "id": "RX1", "role": "RX", "room": "HALL", "pos": [2.7338, 11.6437], "h": 1 },
+    { "id": "RX2", "role": "RX", "room": "R1", "pos": [7.6038, 8.6636], "h": 1 },
+    { "id": "RX3", "role": "RX", "room": "R1", "pos": [7.5639, 6.0637], "h": 1 }
   ],
-  "links": [
-    {"tx": "TX1", "rx": "RX1"},
-    {"tx": "TX1", "rx": "RX2"},
-    {"tx": "TX1", "rx": "RX3"}
-  ]
+  "links": [{ "tx": "TX1", "rx": "RX1" }, { "tx": "TX1", "rx": "RX2" }, { "tx": "TX1", "rx": "RX3" }],
+  "_notes": "Rooms hand-edited from floor plans/walls_only.dxf (inches): the inner wall loop gives Room 1 (the lower of the two stacked 13 x 9.5 ft rooms, DXF x 0..156, y -118.5..-4.5), Room 2 (y 0..114) and the L-shaped hallway; doors are the 32 in gaps in the 4.5 in wall between the hallway and each room (the drawing has no door leaves, so swing none). Walls, nodes and links are written by tools/walls_to_floorplan.py. Meters, origin = the drawing's bottom-left corner, y up, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position.",
+  "_source": "Walls of F1 from floor plans/walls_only.dxf (inches; floor origin = DXF (-147, -352.5)); boards from firmware/tools/layouts/two-rooms.json (origin DXF (0, -4.5)) by tools/walls_to_floorplan.py on 2026-10-24. Rooms are hand-edited."
 }

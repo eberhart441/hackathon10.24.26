@@ -9,82 +9,90 @@
       "rooms": [
         {
           "id": "R1",
-          "name": "Room 101",
+          "name": "Room 1",
           "simulated": false,
-          "polygon": [[0, 0], [3.9624, 0], [3.9624, 2.8448], [0, 2.8448]],
-          "doors": [{ "edge": 3, "offset": 1.9558, "width": 0.8128, "swing": "in", "hinge": "end" }],
+          "polygon": [[3.7338, 5.9436], [7.6962, 5.9436], [7.6962, 8.8392], [3.7338, 8.8392]],
+          "doors": [{ "edge": 3, "offset": 2.0066, "width": 0.8128, "swing": "none" }],
           "furniture": [],
-          "crewSlot": [3.5, 0.4]
+          "crewSlot": [7.1, 6.4]
+        },
+        {
+          "id": "HALL",
+          "name": "Hallway",
+          "simulated": false,
+          "polygon": [
+            [0.1143, 0.1143],
+            [3.6195, 0.1143],
+            [3.6195, 11.9634],
+            [12.3063, 11.9634],
+            [12.3063, 21.1074],
+            [0.1143, 21.1074]
+          ],
+          "doors": [
+            { "edge": 1, "offset": 5.9055, "width": 0.8128, "swing": "none" },
+            { "edge": 1, "offset": 8.9154, "width": 0.8128, "swing": "none" }
+          ],
+          "furniture": [],
+          "crewSlot": [1.9, 9.6]
         },
         {
           "id": "R2",
-          "name": "Storage",
-          "simulated": true,
-          "polygon": [[3.96, 0], [7.16, 0], [7.16, 2.84], [3.96, 2.84]],
-          "doors": [{ "edge": 0, "offset": 0.3, "width": 0.91, "swing": "in" }],
-          "furniture": [{ "kind": "shelf", "x": 6.66, "y": 0.6, "w": 0.4, "d": 1.8, "h": 1.8 }],
-          "crewSlot": [4.4, 2.4]
-        }
-      ]
-    },
-    {
-      "id": "F2",
-      "name": "Floor 2",
-      "level": 1,
-      "rooms": [
-        {
-          "id": "R3",
-          "name": "Office",
-          "simulated": true,
-          "polygon": [[0, 0], [3.5, 0], [3.5, 3.0], [0, 3.0]],
-          "doors": [{ "edge": 2, "offset": 0.3, "width": 0.91, "swing": "in" }],
-          "furniture": [{ "kind": "desk", "x": 0.3, "y": 0.3, "w": 1.6, "d": 0.8, "h": 0.75 }],
-          "crewSlot": [3.0, 0.4]
-        },
-        {
-          "id": "R4",
-          "name": "Dorm room",
-          "simulated": true,
-          "polygon": [[3.5, 0], [7.16, 0], [7.16, 3.0], [3.5, 3.0]],
-          "doors": [{ "edge": 2, "offset": 2.4, "width": 0.91, "swing": "in" }],
-          "furniture": [{ "kind": "bed", "x": 5.0, "y": 0.2, "w": 2.0, "d": 1.0, "h": 0.5 }],
-          "crewSlot": [3.9, 0.4]
-        },
-        {
-          "id": "R5",
-          "name": "Restroom",
-          "simulated": true,
-          "polygon": [[0, 4.4], [2.5, 4.4], [2.5, 6.4], [0, 6.4]],
-          "doors": [{ "edge": 0, "offset": 0.8, "width": 0.91, "swing": "in" }],
+          "name": "Room 2",
+          "simulated": false,
+          "polygon": [[3.7338, 8.9535], [7.6962, 8.9535], [7.6962, 11.8491], [3.7338, 11.8491]],
+          "doors": [{ "edge": 3, "offset": 2.0066, "width": 0.8128, "swing": "none" }],
           "furniture": [],
-          "crewSlot": [0.4, 6.0]
-        },
-        {
-          "id": "R6",
-          "name": "Lounge",
-          "simulated": true,
-          "polygon": [[2.5, 4.4], [7.16, 4.4], [7.16, 6.4], [2.5, 6.4]],
-          "doors": [{ "edge": 0, "offset": 1.2, "width": 1.2, "swing": "in" }],
-          "furniture": [{ "kind": "sofa", "x": 4.6, "y": 5.5, "w": 2.0, "d": 0.8, "h": 0.8 }],
-          "crewSlot": [6.7, 6.0]
+          "crewSlot": [7.1, 9.4]
         }
+      ],
+      "walls": [
+        [
+          [12.4206, 11.8491],
+          [7.8105, 11.8491],
+          [7.8105, 8.9535],
+          [7.8105, 8.8392],
+          [7.8105, 5.8293],
+          [3.7338, 5.8293],
+          [3.7338, 0.0],
+          [0.0, 0.0],
+          [0.0, 21.2217],
+          [12.4206, 21.2217]
+        ],
+        [
+          [3.6195, 0.1143],
+          [3.6195, 6.0198],
+          [3.7338, 6.0198],
+          [3.7338, 5.9436],
+          [7.6962, 5.9436],
+          [7.6962, 8.8392],
+          [3.7338, 8.8392],
+          [3.7338, 6.8326],
+          [3.6195, 6.8326],
+          [3.6195, 9.0297],
+          [3.7338, 9.0297],
+          [3.7338, 8.9535],
+          [7.6962, 8.9535],
+          [7.6962, 11.8491],
+          [3.7338, 11.8491],
+          [3.7338, 9.8425],
+          [3.6195, 9.8425],
+          [3.6195, 11.9634],
+          [12.3063, 11.9634],
+          [12.3063, 21.1074],
+          [0.1143, 21.1074],
+          [0.1143, 11.9634],
+          [0.1143, 0.1143]
+        ]
       ]
     }
   ],
   "nodes": [
-    { "id": "TX1", "role": "TX", "room": "R1", "pos": [0, 2.8438], "h": 1 },
-    { "id": "TX2", "role": "TX", "room": "R1", "pos": [3.9624, 0], "h": 1 },
-    { "id": "RX1", "role": "RX", "room": "R1", "pos": [3.9624, 1.4204], "h": 1 },
-    { "id": "RX2", "role": "RX", "room": "R1", "pos": [1.9812, 0], "h": 1 },
-    { "id": "RX3", "role": "RX", "room": "R1", "pos": [0, 1.4204], "h": 1 },
-    { "id": "RX4", "role": "RX", "room": "R1", "pos": [1.9812, 2.8438], "h": 1 }
+    { "id": "TX1", "role": "TX", "room": "HALL", "pos": [3.2339, 6.4435], "h": 1 },
+    { "id": "RX1", "role": "RX", "room": "HALL", "pos": [2.7338, 11.6437], "h": 1 },
+    { "id": "RX2", "role": "RX", "room": "R1", "pos": [7.6038, 8.6636], "h": 1 },
+    { "id": "RX3", "role": "RX", "room": "R1", "pos": [7.5639, 6.0637], "h": 1 }
   ],
-  "links": [
-    { "tx": "TX1", "rx": "RX1" },
-    { "tx": "TX1", "rx": "RX2" },
-    { "tx": "TX2", "rx": "RX3" },
-    { "tx": "TX2", "rx": "RX4" }
-  ],
-  "_notes": "Hand-edited. Meters, origin bottom-left of each floor, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position. F2 rooms are SIMULATED. Furniture x/y is the rectangle's min corner; w along x, d along y.",
-  "_source": "Room R1 from floor plans/conference_room.dxf (inches; DXF size 3.9624 x 2.8956 m; overrides: height=9ft4in; DXF area label 123.5 SF; boards from firmware/tools/layouts/demo-room.json) by tools/dxf_to_floorplan.py on 2026-10-24."
+  "links": [{ "tx": "TX1", "rx": "RX1" }, { "tx": "TX1", "rx": "RX2" }, { "tx": "TX1", "rx": "RX3" }],
+  "_notes": "Rooms hand-edited from floor plans/walls_only.dxf (inches): the inner wall loop gives Room 1 (the lower of the two stacked 13 x 9.5 ft rooms, DXF x 0..156, y -118.5..-4.5), Room 2 (y 0..114) and the L-shaped hallway; doors are the 32 in gaps in the 4.5 in wall between the hallway and each room (the drawing has no door leaves, so swing none). Walls, nodes and links are written by tools/walls_to_floorplan.py. Meters, origin = the drawing's bottom-left corner, y up, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position.",
+  "_source": "Walls of F1 from floor plans/walls_only.dxf (inches; floor origin = DXF (-147, -352.5)); boards from firmware/tools/layouts/two-rooms.json (origin DXF (0, -4.5)) by tools/walls_to_floorplan.py on 2026-10-24. Rooms are hand-edited."
 }

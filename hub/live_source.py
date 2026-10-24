@@ -7,7 +7,12 @@ correction. room_engine.py turns the links of each room into one of the four roo
 Which room a receiver belongs to comes from the floor plan (hub/config/floorplan.json), not
 from the board's room_id setting, so the plan and the data cannot disagree silently: a
 mismatch is logged once. Rooms marked "simulated" in the floor plan are filled from the
-scripted mock when `with_sim` is on, and every message then carries simulated: true.
+scripted mock when `with_sim` is on, and every message then carries simulated: true. Any other
+room with no receiver is reported UNKNOWN ("no sensors") for the whole incident, so it is ranked
+for a search instead of silently missing.
+
+A receiver the viewer would leave out of its motion map (losing packets, glitching, clipping) is
+not judged here either: its room falls back to its other receivers, or to UNKNOWN.
 
 Privacy: transmitter MACs, raw CSI and activity numbers stay in this process (RAM only).
 Messages carry room-level state and node names only. Nothing is written to disk. In IDLE the
@@ -71,6 +76,7 @@ class FloorplanLinks:
         for link in plan.get("links", []):
             self.tx_receivers.setdefault(link["tx"], []).append(link["rx"])
         self.live_rooms: list[str] = [r for r in self.room_ids if r in set(self.rx_room.values())]
+        self.unsensed: list[str] = [r for r in self.room_ids if r not in self.live_rooms and r not in self.simulated]
 
     def receivers_in(self, room_id: str) -> list[str]:
         return sorted(rx for rx, room in self.rx_room.items() if room == room_id)
@@ -164,7 +170,7 @@ class LiveSource(Broadcaster):
 
     # --- StateSource -----------------------------------------------------------
     def room_ids(self) -> set[str]:
-        ids = set(self.plan.live_rooms)
+        ids = set(self.plan.live_rooms) | set(self.plan.unsensed)
         if self.with_sim:
             ids |= self.plan.simulated & set(scripted.ROOM_IDS)
         return ids
@@ -191,6 +197,7 @@ class LiveSource(Broadcaster):
             self._reset_tags()
             # The alarm-time snapshot comes from the rolling (RAM-only) engine state.
             self._snapshot = {r: e["state"] for r, e in self._entries.items()}
+            self._snapshot.update({r: "UNKNOWN" for r in self.plan.unsensed})
             if self.with_sim:
                 self._sim_clock = scripted.Clock(now, self.sim_speed)
                 self._snapshot.update(scripted.alarm_snapshot(self._sim_clock))
@@ -274,7 +281,11 @@ class LiveSource(Broadcaster):
                 activity, threshold = node.update_state(now)
                 score = None if activity is None or not threshold else activity / threshold
                 hb_age = None if node.heartbeat_t is None else now - node.heartbeat_t
-                out[node_id] = LinkReading(node_id, node.state, score, hb_age, hb.measured_pps if hb else None)
+                fault = None
+                if node.state in room_engine.USABLE_STATES and hb_age is not None and hb_age <= room_engine.HB_OFFLINE_S:
+                    rate = sum(1 for t in node.times if now - t <= 1.0)
+                    fault = node.off_reason(now, True, rate)
+                out[node_id] = LinkReading(node_id, node.state, score, hb_age, hb.measured_pps if hb else None, fault)
         for rx in self.plan.rx_room:  # receivers never heard from
             out.setdefault(rx, LinkReading(rx, "nosignal", None, None, None))
         return out
@@ -297,6 +308,9 @@ class LiveSource(Broadcaster):
             elif r.hb_age is not None and r.hb_age > room_engine.HB_DEGRADED_S:
                 node.update(status="degraded", cause=f"{rx} heartbeat late (over 3 s)",
                             action=f"Check {rx} USB cable")
+            elif r.fault:
+                node.update(status="degraded", cause=f"{rx} not judged: {r.fault}",
+                            action=f"Check {rx}'s antenna and its distance to the transmitter")
             elif r.state == "weak":
                 node.update(status="degraded", cause=f"{rx} signal too weak or flat to judge",
                             action="Check the antenna is not covered and the boards face each other")
@@ -336,6 +350,7 @@ class LiveSource(Broadcaster):
                               "stored_samples": 0, "fault": None},
             }
         rooms = [dict(self._entries[r]) for r in self.plan.live_rooms if r in self._entries]
+        rooms += [room_engine.unsensed_entry(r) for r in self.plan.unsensed]
         if self.with_sim and self._sim_clock is not None:
             vt = (now - self._sim_clock.alarm_ts) * self.sim_speed
             rooms += [r for r in scripted.room_list(vt, self._sim_clock) if r["room_id"] in self.plan.simulated]

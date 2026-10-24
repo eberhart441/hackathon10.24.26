@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Floorplan, RoomStateCode, Vec2 } from '../types';
 import type { RoomDescriptor, SceneModel } from '../scene/model';
-import { bounds, doorViews, inradiusAt, wallSegments } from '../scene/geometry';
+import { bounds, doorViews, floorBounds, inradiusAt, wallSegments, wallsPath } from '../scene/geometry';
 import { STATE_FILL, STATE_PATTERN } from '../scene/palette';
 import { RoomLabel } from '../ui/RoomLabel';
-import { CrewIcon } from '../ui/icons';
+import { CrewIcon, StateIcon } from '../ui/icons';
 
 interface Props {
   plan: Floorplan;
@@ -12,7 +12,7 @@ interface Props {
   floorId: string;
   onRoomTap: (roomId: string) => void;
   snapshot?: boolean; // draw alarm_time_state instead of the live state
-  minimal?: boolean; // phone view: rank + name pills and responder markers; details live in the list
+  minimal?: boolean; // phone view: only the rooms, each with its state inside it, and responder markers
 }
 
 const PAD = 0.6;
@@ -24,10 +24,13 @@ const pts = (poly: Vec2[]) => poly.map(([x, y]) => `${x},${y}`).join(' ');
 export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: Props) {
   const floor = plan.floors.find((f) => f.id === floorId) ?? plan.floors[0];
   const rooms = model.rooms.filter((r) => r.floorId === floor.id);
-  const b = bounds(floor.rooms.map((r) => r.polygon));
-  const vb = { x: b.minX - PAD, y: b.minY - PAD, w: b.maxX - b.minX + 2 * PAD, h: b.maxY - b.minY + 2 * PAD };
-  const walls = wallSegments(floor.rooms);
-  const nodes = plan.nodes.filter((n) => floor.rooms.some((r) => r.id === n.room));
+  const pad = minimal ? 0.15 : PAD;
+  const b = floorBounds(floor);
+  const vb = { x: b.minX - pad, y: b.minY - pad, w: b.maxX - b.minX + 2 * pad, h: b.maxY - b.minY + 2 * pad };
+  // A walls-only DXF gives the real walls; otherwise they are drawn along the room outlines.
+  const walls = floor.walls?.length ? [] : wallSegments(floor.rooms);
+  // The phone shows rooms only: no boards or radio links.
+  const nodes = minimal ? [] : plan.nodes.filter((n) => floor.rooms.some((r) => r.id === n.room));
   const links = plan.links.filter((l) => nodes.some((n) => n.id === l.tx) && nodes.some((n) => n.id === l.rx));
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
@@ -55,7 +58,7 @@ export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: P
       <svg viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${floor.name} plan`}>
         <PatternDefs />
         <g transform={`translate(0 ${2 * vb.y + vb.h}) scale(1 -1)`}>
-          <rect x={vb.x} y={vb.y} width={vb.w} height={vb.h} fill="url(#grid)" />
+          <rect class="grid-bg" x={vb.x} y={vb.y} width={vb.w} height={vb.h} fill="url(#grid)" />
           {rooms.map((r) => {
             const st = shownState(r);
             const fill = snapshot ? (st ? STATE_FILL[st] : IDLE_FLOOR) : r.occupancy?.fill ?? IDLE_FLOOR;
@@ -75,7 +78,8 @@ export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: P
                 </clipPath>
                 <polygon points={pts(r.def.polygon)} fill={fill} />
                 {pattern && pattern !== 'solid' ? <polygon points={pts(r.def.polygon)} fill={`url(#pat-${pattern})`} /> : null}
-                {r.simulated ? <polygon points={pts(r.def.polygon)} fill="url(#pat-sim)" /> : null}
+                {/* The phone has no header badge, so simulated data is marked inside every room. */}
+                {r.simulated || (minimal && model.simulated) ? <polygon points={pts(r.def.polygon)} fill="url(#pat-sim)" /> : null}
                 {!snapshot && st === 'MOTION' && !r.greyed ? (
                   <g clip-path={`url(#clip-${r.id})`}>
                     {[0, 1, 2].map((i) => (
@@ -97,6 +101,7 @@ export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: P
             );
           })}
 
+          {floor.walls?.length ? <path class="wall-mass" d={wallsPath(floor.walls)} fill-rule="evenodd" /> : null}
           {walls.map((w, i) => (
             <line key={i} class="wall" x1={w.a[0]} y1={w.a[1]} x2={w.b[0]} y2={w.b[1]} />
           ))}
@@ -150,30 +155,15 @@ export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: P
               {snapshot ? (
                 <span class={`snap-label st-${shownState(r) ?? 'idle'}`}>{r.occupancy?.alarmTimeLabel ?? '—'}</span>
               ) : minimal ? (
-                <span class={`mini-label st-${r.occupancy?.state ?? 'idle'}${r.occupancy?.searched ? ' searched' : ''}`}>
-                  {r.occupancy?.rank ? <span class={`rank${r.occupancy.isTop ? ' top' : ''}`}>{r.occupancy.rank}</span> : null}
-                  {r.name}
-                </span>
+                <PhoneLabel room={r} hubLost={model.hubLost} maxWidth={roomWidthPx(r, scale)} />
               ) : (
                 <RoomLabel room={r} onTap={onRoomTap} compact={box.w < 420} />
               )}
             </div>
           );
         })}
-        {/* Responder markers sit at each room's fixed crew spot: a room, never a measured point. */}
-        {minimal
-          ? rooms.flatMap((r) =>
-              r.crew.map((c, i) => {
-                const [x, y] = toPx([r.def.crewSlot[0] + i * 0.45, r.def.crewSlot[1]]);
-                return (
-                  <div class={`crew-pin${c.hollow ? ' hollow' : ''}`} style={{ left: `${x}px`, top: `${y}px` }} key={c.tagId}>
-                    <CrewIcon hollow={c.hollow} size={26} />
-                    <span>{c.tagId}</span>
-                  </div>
-                );
-              }),
-            )
-          : null}
+        {/* A responder located in one room is a badge in that room's label (see PhoneLabel); one
+            that is only near two rooms gets a chip between them, never a single room. */}
         {minimal
           ? model.crewChips
               .filter((c) => c.floorId === floor.id && c.rooms.length)
@@ -183,13 +173,69 @@ export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: P
                 const [x, y] = toPx([cs.reduce((s, p) => s + p[0], 0) / cs.length, cs.reduce((s, p) => s + p[1], 0) / cs.length]);
                 return (
                   <div class="label-pin chip-pin" style={{ left: `${x}px`, top: `${y + 34}px` }} key={c.tagId}>
-                    <span class="crew-chip">{c.text}</span>
+                    <span class={`crew-chip${c.you ? ' you' : ''}`}>{c.you ? c.text.replace(c.tagId, 'YOU') : c.text}</span>
                   </div>
                 );
               })
           : null}
       </div>
     </div>
+  );
+}
+
+// Widest a label may be and still sit inside its room on screen.
+function roomWidthPx(r: RoomDescriptor, scale: number): number {
+  const b = bounds([r.def.polygon]);
+  return Math.max(64, (b.maxX - b.minX) * scale - 8);
+}
+
+// Phone view: everything about a room is inside the room (name, priority, state, one status line).
+function PhoneLabel({ room, hubLost, maxWidth }: { room: RoomDescriptor; hubLost: boolean; maxWidth: number }) {
+  const o = room.occupancy;
+  if (!o) {
+    return (
+      <span class="mini-label st-idle" style={{ maxWidth: `${maxWidth}px` }}>
+        <span class="ml-name">{room.name}</span>
+        <span class="ml-detail">{hubLost ? 'No hub connection' : 'No alarm'}</span>
+      </span>
+    );
+  }
+  const detail = o.searched ? 'Searched' : o.detailText ?? o.annotation ?? o.subLabel;
+  return (
+    <span class={`mini-label st-${o.state}${o.searched ? ' searched' : ''}${room.greyed ? ' greyed' : ''}`} style={{ maxWidth: `${maxWidth}px` }}>
+      <span class="ml-name">
+        {o.rank ? <span class={`rank${o.isTop ? ' top' : ''}`}>{o.rank}</span> : null}
+        {room.name}
+      </span>
+      <span class="ml-state">
+        <StateIcon state={o.state} size={14} />
+        {o.label}
+      </span>
+      {detail ? <span class="ml-detail">{detail}</span> : null}
+      <CrewBadges room={room} />
+    </span>
+  );
+}
+
+// Responders located in this room: the phone's own tag as YOU, the others by tag id. A room, never
+// a measured point; hollow (dashed) when the tag was last heard here but has gone quiet.
+function CrewBadges({ room }: { room: RoomDescriptor }) {
+  if (!room.crew.length) return null;
+  const crew = [...room.crew].sort((a, b) => Number(b.you) - Number(a.you));
+  return (
+    <span class="ml-crew">
+      {crew.map((c) => (
+        <span
+          key={c.tagId}
+          class={`crew-badge${c.hollow ? ' hollow' : ''}${c.you ? ' you' : ''}`}
+          role="img"
+          aria-label={c.you ? `You are here${c.hollow ? ' (last heard)' : ''}` : `Responder ${c.tagId}${c.hollow ? ', last heard here' : ''}`}
+        >
+          <CrewIcon hollow={c.hollow} size={c.you ? 16 : 13} />
+          {c.you ? 'YOU' : c.tagId}
+        </span>
+      ))}
+    </span>
   );
 }
 

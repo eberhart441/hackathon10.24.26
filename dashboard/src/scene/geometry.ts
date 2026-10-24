@@ -1,4 +1,4 @@
-import type { Door, RoomDef, Vec2 } from '../types';
+import type { Door, FloorDef, RoomDef, Vec2 } from '../types';
 import { polygonArea } from '../floorplan/validate';
 
 export interface WallSegment {
@@ -27,8 +27,9 @@ function inwardNormal(poly: Vec2[], a: Vec2, b: Vec2): Vec2 {
   return polygonArea(poly) >= 0 ? left : [-left[0], -left[1]];
 }
 
+// Door leaves to draw; an opening with swing "none" has no leaf.
 export function doorViews(room: RoomDef): DoorView[] {
-  return (room.doors ?? []).map((d: Door) => {
+  return (room.doors ?? []).filter((d) => d.swing !== 'none').map((d: Door) => {
     const a = room.polygon[d.edge];
     const b = room.polygon[(d.edge + 1) % room.polygon.length];
     const L = len(sub(b, a));
@@ -106,6 +107,16 @@ export function bounds(polys: Vec2[][]): { minX: number; minY: number; maxX: num
     }
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   return { minX, minY, maxX, maxY };
+}
+
+// Everything drawn on a floor: rooms, plus the DXF walls around them.
+export function floorBounds(floor: FloorDef) {
+  return bounds([...floor.rooms.map((r) => r.polygon), ...(floor.walls ?? [])]);
+}
+
+// The DXF walls as one SVG path; drawn with fill-rule evenodd, the space between loops is wall.
+export function wallsPath(walls: Vec2[][]): string {
+  return walls.map((l) => `M${l.map(([x, y]) => `${x} ${y}`).join('L')}Z`).join('');
 }
 
 // Distance from a point to the nearest polygon edge: keeps motion rings inside the room.

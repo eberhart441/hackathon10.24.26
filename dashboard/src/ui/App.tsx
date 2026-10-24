@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Floorplan } from '../types';
-import { AuthError, api, ensureToken, forgetToken, getToken, isLaptop } from '../api';
+import { AuthError, api, ensureToken, forgetToken, getMyTag, getToken, isLaptop } from '../api';
 import { Store, systemState, type StoreState } from '../store';
 import { WsClient } from '../ws/client';
 import { validateFloorplan } from '../floorplan/validate';
@@ -66,6 +66,7 @@ export function App() {
   const [frameReq, setFrameReq] = useState<{ seq: number; rooms: string[] | null }>({ seq: 0, rooms: null });
   const [rotateSeq, setRotateSeq] = useState(0);
   const [snapshotBig, setSnapshotBig] = useState(false);
+  const [boundTag, setBoundTag] = useState<string | null>(null); // the responder tag this phone's holder carries
   const ws = useRef<WsClient | null>(null);
   const s = useStore();
   const now = useNow();
@@ -82,7 +83,9 @@ export function App() {
   const start = useCallback(async () => {
     try {
       if (!(await ensureToken())) return setPhase('pair');
-      setLaptop(isLaptop() && (await api.whoami()).loopback);
+      const onLaptop = isLaptop() && (await api.whoami()).loopback;
+      setLaptop(onLaptop);
+      setBoundTag(onLaptop && !PHONE_VIEW_FORCED ? null : getMyTag());
       const result = validateFloorplan(await api.floorplan());
       if (!result.ok) {
         setPlanErrors(result.errors);
@@ -116,7 +119,7 @@ export function App() {
     return () => window.clearInterval(t);
   }, [phase, start]);
 
-  const model = useMemo(() => (plan ? buildSceneModel(plan, s, now) : null), [plan, s, now]);
+  const model = useMemo(() => (plan ? buildSceneModel(plan, s, now, boundTag) : null), [plan, s, now, boundTag]);
   const sys = systemState(s);
   const alarm = sys === 'ALARM_ACTIVE';
 
@@ -194,7 +197,7 @@ export function App() {
     return (
       <>
         {flash ? <div class="flash" aria-hidden="true" /> : null}
-        <PhoneView plan={plan} model={model} store={s} now={now} floorId={floorId} onFloor={setFloorId} />
+        <PhoneView plan={plan} model={model} floorId={floorId} />
       </>
     );
   }

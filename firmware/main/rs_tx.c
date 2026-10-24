@@ -30,7 +30,7 @@ void rs_tx_start(const rs_config_t *cfg)
 {
     memcpy(s_peer, cfg->peer, 6);
     /* Unicast to the paired receiver at HT MCS0 (requirement 2.1). */
-    ESP_ERROR_CHECK(rs_radio_add_peer(s_peer, cfg->channel, true));
+    ESP_ERROR_CHECK(rs_radio_add_peer(s_peer, cfg->channel, true, WIFI_PHY_RATE_MCS0_LGI));
     const esp_timer_create_args_t args = {.callback = send_cb, .name = "rs_tx"};
     ESP_ERROR_CHECK(esp_timer_create(&args, &s_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 1000000ULL / cfg->pps));

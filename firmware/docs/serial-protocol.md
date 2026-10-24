@@ -90,6 +90,12 @@ The replies are an addition; `design.md` does not define any. Lines starting `CM
 | tag_id | tag | up to 4 letters, digits, `_` or `-` | `E1` |
 | tags | rx | commissioned tag IDs, comma separated, for example `E1,E2` | none |
 | rx_mode | rx | `HUB` only | `HUB` |
+| relay_to | rx | MAC of the master to relay data to, or `off` | `off` |
+| relays | tx | receivers whose relayed data this master prints, comma separated MACs (up to 4), or `none` | `none` |
+
+### Relay mode (optional, only the master on USB)
+
+Off by default. With `SET relay_to=<master mac>` on each receiver and `SET relays=<rx1 mac>,<rx2 mac>` on the master (then `REBOOT` all), receivers send their `CSI`, `HB` and `TAG` lines over the air to the master, batched about 4 lines per frame at HT MCS4, and the master prints them on its USB port unchanged. The hub reads one port and sees the same lines as before. A relaying receiver prints only command replies on its own USB port. Lines the relay could not deliver are added to that receiver's `csi_q_drops`. Not yet tested on hardware; whether the extra radio traffic hurts sensing has not been measured.
 
 `peers` (the edge-mode list of commissioned receivers) is recognised but rejected with `ERR,SET,not_implemented`.
 

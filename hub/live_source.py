@@ -25,16 +25,36 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from roomsense_hub import TagSummary, format_record, parse_line
 from roomsense_hub.viewer import Hub as LinkHub
 
 from . import room_engine, scripted
 from .room_engine import LinkReading, RoomTrack
 from .source import Broadcaster, Message
+from .tag_locator import TagLocator
 
 log = logging.getLogger("hub.live")
 
 TICK_S = 0.5
 TX_DEAD_AFTER_S = 5.0
+RESPONDER_LEFT_NOTE_S = 60.0  # "recent motion may be responder" this long after a tag leaves a room
+
+
+class _Links(LinkHub):
+    """The viewer's link hub, plus a hook so TAG summaries reach the tag locator. Serial and
+    replay readers call feed_line on this object directly."""
+
+    def __init__(self, on_tag: Callable[[TagSummary, float], None]):
+        super().__init__()
+        self._on_tag = on_tag
+
+    def feed_line(self, line: str, now: float | None = None, port: str | None = None) -> None:
+        now = time.time() if now is None else now
+        super().feed_line(line, now, port)
+        if line.startswith("TAG,"):
+            rec = parse_line(line)
+            if isinstance(rec, TagSummary):
+                self._on_tag(rec, now)
 
 
 class FloorplanLinks:
@@ -42,6 +62,7 @@ class FloorplanLinks:
 
     def __init__(self, plan: dict):
         self.room_ids: list[str] = [r["id"] for f in plan["floors"] for r in f["rooms"]]
+        self.room_floor: dict[str, str] = {r["id"]: f["id"] for f in plan["floors"] for r in f["rooms"]}
         self.simulated: set[str] = {r["id"] for f in plan["floors"] for r in f["rooms"] if r.get("simulated")}
         nodes = {n["id"]: n for n in plan.get("nodes", [])}
         self.rx_room: dict[str, str] = {i: n["room"] for i, n in nodes.items() if n["role"] == "RX"}
@@ -64,7 +85,11 @@ class LiveSource(Broadcaster):
                  sim_speed: float = 1.0, clock: Callable[[], float] = time.time, tick_s: float = TICK_S):
         super().__init__()
         self.plan = FloorplanLinks.load(floorplan)
-        self.links = LinkHub()
+        self.links = _Links(self._on_tag)
+        self.tags = TagLocator(self.plan.live_rooms)
+        self._tag_lock = threading.Lock()
+        self._tag_room: dict[str, str] = {}  # tag -> room it was last located in (medium/high)
+        self._tag_left: dict[str, float] = {}  # room -> when a tag last left it
         self.hold_s = hold_s
         self.with_sim = with_sim and bool(self.plan.simulated)
         self.sim_speed = sim_speed
@@ -88,6 +113,31 @@ class LiveSource(Broadcaster):
     def feed_line(self, line: str, now: float | None = None) -> None:
         """Thread-safe: called by serial/replay/simulator threads, or directly by tests."""
         self.links.feed_line(line, self._clock() if now is None else now)
+
+    def _on_tag(self, summary: TagSummary, now: float) -> None:
+        # Tags are located only during an incident; in IDLE their summaries are dropped (Req 29.2).
+        room = self.plan.rx_room.get(summary.node_id)
+        if self._alarm_at is None or room is None:
+            return
+        with self._tag_lock:
+            self.tags.on_summary(summary.tag_id, room, summary.mean_rssi, now)
+
+    def add_tag_simulator(self, tag_id: str = "E1", room_id: str | None = None) -> None:
+        """A responder tag standing in one live room, heard by that room's receivers once a
+        second (for trying the crew marker without a tag board)."""
+        room = room_id or self.plan.live_rooms[0]
+        rxs = self.plan.receivers_in(room)
+
+        def run() -> None:
+            import random
+
+            rng = random.Random(3)
+            while not self._stop.wait(1.0):
+                for rx in rxs:
+                    rssi = -55 + rng.gauss(0, 2)
+                    self.feed_line(format_record(TagSummary(rx, room, tag_id, 10, round(rssi, 1), round(rssi) + 2)))
+
+        self._spawn(run)
 
     def add_serial_port(self, port: str, baud: int = 921600) -> None:
         from roomsense_hub.viewer import serial_reader
@@ -138,6 +188,7 @@ class LiveSource(Broadcaster):
             now = self._clock()
             self._alarm_at = now
             self._searched.clear()
+            self._reset_tags()
             # The alarm-time snapshot comes from the rolling (RAM-only) engine state.
             self._snapshot = {r: e["state"] for r, e in self._entries.items()}
             if self.with_sim:
@@ -151,8 +202,32 @@ class LiveSource(Broadcaster):
         self._sim_clock = None
         self._snapshot = {}
         self._searched.clear()
+        self._reset_tags()  # tag positions live only for the incident (Req 29.4)
         self.publish_frame(self._clock())
         return {"system_state": "IDLE", "simulated": self.with_sim}
+
+    def _reset_tags(self) -> None:
+        with self._tag_lock:
+            self.tags.reset()
+            self._tag_room.clear()
+            self._tag_left.clear()
+
+    def _crew(self, now: float, readings: dict[str, LinkReading]) -> tuple[Message, list[dict]]:
+        degraded = {self.plan.rx_room[rx] for rx, r in readings.items() if r.online() and not r.healthy()}
+        offline = any(not r.online() for r in readings.values())
+        with self._tag_lock:
+            crew = self.tags.crew_message(now, self.plan.room_floor, degraded, offline)
+            faults = self.tags.lost_faults(now)
+            for t in crew["tags"]:
+                located = t["room_id"] if t["location_kind"] == "room" else None
+                prev = self._tag_room.get(t["tag_id"])
+                if prev and prev != located:
+                    self._tag_left[prev] = now
+                if located:
+                    self._tag_room[t["tag_id"]] = located
+                else:
+                    self._tag_room.pop(t["tag_id"], None)
+        return crew, faults
 
     async def mark_searched(self, room_id: str) -> None:
         if room_id not in self.room_ids():
@@ -174,6 +249,13 @@ class LiveSource(Broadcaster):
             room_readings = [readings[rx] for rx in self.plan.receivers_in(room_id) if rx in readings]
             self._entries[room_id] = room_engine.update(track, room_readings, now, self.hold_s)
         self._health = self._health_msg(readings, now)
+        if self._alarm_at is not None:
+            self._crew_msg, self._health["tag_faults"] = self._crew(now, readings)
+            n_faults = sum(n["status"] != "ok" for n in self._health["nodes"]) + len(self._health["tag_faults"])
+            self._health["summary"] = "All sensors online" if n_faults == 0 else \
+                f"{n_faults} fault" + ("s" if n_faults > 1 else "")
+        else:
+            self._crew_msg = None
         self.publish_frame(now)
 
     def _readings(self, now: float) -> dict[str, LinkReading]:
@@ -241,7 +323,8 @@ class LiveSource(Broadcaster):
 
     def frame(self, now: float) -> dict[str, Message]:
         health = getattr(self, "_health", None) or self._health_msg(self._readings(now), now)
-        crew = {"type": "crew", "ts": now, "tags": [], "floor_crew_counts": {}}
+        crew = getattr(self, "_crew_msg", None) if self._alarm_at is not None else None
+        crew = crew or {"type": "crew", "ts": now, "tags": [], "floor_crew_counts": {}}
         if self._alarm_at is None:
             return {
                 "room_states": {"type": "room_states", "ts": now, "system_state": "IDLE",
@@ -255,9 +338,18 @@ class LiveSource(Broadcaster):
         if self.with_sim and self._sim_clock is not None:
             vt = (now - self._sim_clock.alarm_ts) * self.sim_speed
             rooms += [r for r in scripted.room_list(vt, self._sim_clock) if r["room_id"] in self.plan.simulated]
+        present = {t["room_id"] for t in crew["tags"]
+                   if t["location_kind"] == "room" and t["confidence_band"] in ("medium", "high")}
         for r in rooms:
             r["searched"] = r["room_id"] in self._searched
             r["alarm_time_state"] = self._snapshot.get(r["room_id"])
+            # Labels only: a responder never hides or downgrades a room's state (Req 27.1-27.3).
+            if r["room_id"] in self._entries:
+                if r["state"] == "MOTION" and r["room_id"] in present:
+                    r["annotation"] = "responder_present"
+                elif r["state"] == "POSSIBLE" and r["room_id"] not in present and \
+                        now - self._tag_left.get(r["room_id"], -1e9) < RESPONDER_LEFT_NOTE_S:
+                    r["annotation"] = "recent_motion_may_be_responder"
         return {
             "room_states": {"type": "room_states", "ts": now, "system_state": "ALARM_ACTIVE",
                             "simulated": self.with_sim, "rooms": rooms, "ranking": scripted.rank(rooms)},

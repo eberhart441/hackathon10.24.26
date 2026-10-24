@@ -974,3 +974,242 @@ button {
     transition: none !important;
   }
 }
+
+/* ---------- phone view (responder) ---------- */
+
+.app.phone {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.p-hdr {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.app.phone.alarm .p-hdr {
+  background: var(--alarm);
+}
+.p-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.p-status .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  flex: none;
+}
+.p-status .dot.on {
+  background: #fff;
+}
+.p-faults {
+  margin-left: auto;
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fff;
+  color: #000;
+}
+.p-hdr .badge {
+  align-self: flex-start;
+}
+
+.p-crew {
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #0f141a;
+  border-bottom: 1px solid var(--line);
+}
+.p-crew li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+}
+.p-crew li.lost {
+  color: var(--muted);
+}
+.p-crew.none {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.p-plan {
+  position: relative;
+  width: 100%;
+  max-height: 46dvh;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+}
+.mini-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 4px;
+  border-radius: 14px;
+  background: rgba(8, 11, 15, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.mini-label.st-idle {
+  padding-left: 9px;
+}
+.mini-label.searched {
+  opacity: 0.55;
+}
+.mini-label .rank {
+  width: 22px;
+  height: 22px;
+  font-size: 0.8rem;
+}
+.crew-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.8));
+}
+.crew-pin span {
+  background: #111;
+  border: 1px solid #fff;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.crew-pin.hollow span {
+  border-style: dashed;
+}
+
+.p-rooms {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.p-room {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 7px solid #8892a0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.p-room.st-MOTION {
+  border-left-color: var(--motion);
+}
+.p-room.st-POSSIBLE {
+  border-left-color: var(--possible);
+}
+.p-room.st-UNKNOWN {
+  border-left-color: var(--unknown);
+  border-left-style: dashed;
+}
+.p-room.st-NO_DETECTION {
+  border-left-color: var(--nodet);
+  border-left-style: dotted;
+}
+.p-room.searched,
+.p-room.greyed {
+  opacity: 0.6;
+}
+.p-room-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.p-room-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.rank.none {
+  background: transparent;
+  border: 2px dotted #5b6270;
+}
+.chip-crew {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #111;
+  border-color: #fff;
+}
+.p-room-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 1rem;
+}
+.p-conf {
+  color: var(--muted);
+}
+.p-since {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.p-detail {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.p-detail.note {
+  font-style: italic;
+}
+.p-hist {
+  margin-top: 4px;
+}
+.p-hist-bar {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: #0b0f14;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.p-hist-bar .seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+/* Patterns as well as colour, so the strip still reads in grayscale (Kiro R9.2). */
+.p-hist-bar .seg.st-POSSIBLE {
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.4) 0 3px, transparent 3px 7px) !important;
+}
+.p-hist-bar .seg.st-UNKNOWN {
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 5px) !important;
+}
+.p-hist-bar .seg.st-NO_DETECTION {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.35) 1px, transparent 1.5px) !important;
+  background-size: 5px 5px !important;
+}
+.p-hist-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.p-idle {
+  padding: 14px;
+  color: var(--muted);
+}

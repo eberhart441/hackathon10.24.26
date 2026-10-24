@@ -30,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--port", action="append", default=[], help="a receiver's serial port (repeatable)")
     src.add_argument("--replay", type=Path, help="replay a captured serial log in a loop")
     src.add_argument("--simulate-boards", action="store_true", help="fake receivers from firmware/tools")
+    src.add_argument("--simulate-tag", action="store_true",
+                     help="a fake responder tag E1 standing in the first live room (heard by its receivers)")
     p.add_argument("--baud", type=int, default=921600)
     p.add_argument("--floorplan", type=Path, default=ROOT / "hub" / "config" / "floorplan.json")
     p.add_argument("--layout", type=Path, default=ROOT / "firmware" / "tools" / "layouts" / "demo-room.json",
@@ -56,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
         source.add_replay(args.replay)
     if args.simulate_boards:
         source.add_board_simulator(args.layout)
+    if args.simulate_tag:
+        source.add_tag_simulator()
 
     settings = Settings.load()
     if args.host:

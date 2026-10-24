@@ -15,11 +15,16 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 ### Hackathon Scope Summary
 
-- In scope (Must): two working room links with CSI streaming; detection classifier with session-held-out evaluation; four-state dashboard served locally and offline; offline-node handling; persistent disclaimer; IDLE and ALARM_ACTIVE recording states; mode B RAM rolling buffer; recording indicator; UI-button alarm trigger; heartbeats with offline detection within 10 seconds; health chip; test-mode toggle with banner and timeout; node-down test; simple inspection report.
-- In scope (Should): fire mode with search-priority ranking; basic calibration mode; node health panel; transmitter-dead vs receiver-dead distinction; hub-lost banner; responder tag firmware; RX tag summaries; hub room selection with hysteresis; crew marker; and the "responder present" label (Section 11d responder location).
-- In scope (Could): "You are here" on a tag-bound device; calibrated per-room tag offsets; the "Mark searched?" suggestion when a tag dwells in a flagged room; and nearest-room ordering within a search-priority tier.
-- Out of scope (deferred / production): physical GPIO/dry-contact alarm trigger and buzzer; body shape, pose, or identity estimation; fire-alarm-panel or life-safety-loop integration; cloud services, accounts, or remote access; regulatory certification (NFPA 72, UL); reliable people counting; breathing detection as a primary signal; full nine-check inspection checklist; mode A dormant capture; CLEARING hold and 24-hour retention purge; physical tablet deployment and laptop-to-tablet hotspot; sub-room responder position; location of untagged people; downed-responder detection; replacement for PASS devices or accountability systems.
-- Hardware: the hackathon build increases to 5 ESP32 boards (2 TX, 2 RX, 1 Responder_Tag) with at most 1 spare.
+- In scope (Must): two working room links with CSI streaming over USB serial; detection classifier with session-held-out evaluation; four-state dashboard served locally and offline; offline-node handling; persistent disclaimer; IDLE and ALARM_ACTIVE recording states; mode B RAM rolling buffer; recording indicator; UI-button alarm trigger; "End incident" action that returns to IDLE and purges the Incident_Record; RX heartbeats with offline detection within 10 seconds; health chip; test-mode toggle with banner and timeout; node-down test; simple inspection report.
+- In scope (Should): fire mode with search-priority ranking; basic calibration mode running in CALIBRATION_State; node health panel; transmitter-dead vs receiver-dead distinction; hub-lost banner; responder tag firmware; RX tag summaries; hub room selection with hysteresis; crew marker; and the "responder present" label (Section 11d responder location).
+- In scope (Could): "You are here" on a tag-bound second device joined to the laptop hotspot; calibrated per-room tag offsets; the "Mark searched?" suggestion when a tag dwells in a flagged room; nearest-room ordering within a search-priority tier; and a 24-hour maximum Incident_Record retention limit.
+- Training data collection: raw CSI recording is performed only by the Training_Tool, a separate data-collection tool/build. The deployed Hub build contains no CSI write path.
+- Out of scope (deferred / production): physical GPIO/dry-contact alarm trigger and buzzer; UDP transport for CSI records (UDP would require joining an access point and leaving the fixed sensing channel); body shape, pose, or identity estimation; fire-alarm-panel or life-safety-loop integration; cloud services, accounts, or remote access; regulatory certification (NFPA 72, UL); reliable people counting; breathing detection as a primary signal; full nine-check inspection checklist; mode A dormant capture; CLEARING hold; physical tablet deployment and laptop-to-tablet hotspot; sub-room responder position; location of untagged people; downed-responder detection; replacement for PASS devices or accountability systems.
+- In scope (Should): edge-inference layer (Requirements 31–37), in which each RX_Node runs Edge_Features, the Edge_Model, and the room-state core on-device so detection and display keep working with the laptop unplugged. The Must remains the laptop Hub path (RX_Node streams raw CSI over serial in HUB_Mode; laptop Data_Pipeline plus CNN+GRU), which is also the fallback.
+- Schedule gates: FEAT_Line and Room_State_Packet formats are frozen at 0:00–0:30. At the 5:30 feature freeze, if device and laptop outputs do not match (Parity_Check fails), the edge-inference layer is cut and RX_Nodes run HUB_Mode.
+- Cut order (relative): Test_Mode is cut first, then the edge-inference layer, then the Responder_Tag.
+- Out of scope / roadmap (edge): a temporal neural network on-device, deferred to ESP32-S3 (vector instructions, ESP-NN acceleration, optional PSRAM); authentication of Room_State_Packets beyond a MAC allow-list; encryption of ESP-NOW broadcasts.
+- Hardware: the hackathon build increases to 5 ESP32 boards (2 TX, 2 RX, 1 Responder_Tag) with at most 1 spare. RX1 doubles as the Annunciator and carries Annunciator hardware (LEDs with series resistors, or an SSD1306-class I2C OLED). For the laptop-unplug demo, RX_Nodes are powered independently of the laptop (self-powered USB hub or power banks).
 
 ## Glossary
 
@@ -37,7 +42,13 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 - **Fire_Mode**: The responder view presenting a high-contrast, search-priority-ranked list of rooms with an alarm-time snapshot alongside the live view.
 - **Calibration_Mode**: The installer workflow that records an empty baseline and reference activity to normalize a room and mark it calibrated.
 - **Test_Mode**: An authorized, tagged, auto-expiring mode that exercises the system without a real alarm and produces an inspection report.
-- **Heartbeat**: A once-per-second health message from a node containing node identity, role, room, and measured packet rate (and additional fields in later tiers).
+- **Heartbeat**: A once-per-second health message sent by each RX_Node to the Hub over serial, containing node identity, role, room, and the measured packet rate from its paired TX_Node (and additional fields in later tiers). TX_Nodes and the Responder_Tag have no serial link to the Hub and send no Heartbeats to the Hub.
+- **Last_Evidence**: The most recent time a room produced occupancy evidence, where occupancy evidence means a smoothed moving probability of at least 80 percent or a smoothed still_present probability of at least 50 percent.
+- **CALIBRATION_State**: A system state, entered from normal mode by an installer, in which calibration baselines and tag RSSI offsets are recorded and Tag_Summaries are processed; occupancy data is not persisted.
+- **Training_Tool**: A separate data-collection tool/build, not a runtime state of the deployed Hub, that records raw CSI to disk; persistence of CSI exists only in the Training_Tool.
+- **Searched_Mark**: A responder's explicit tap marking a room searched.
+- **Health_Log**: The persisted log of node and component health events, kept across incidents and containing no occupancy data.
+- **Occupancy_Data**: Room states, Confidence values, tag positions, and CSI.
 - **Health_Chip**: A persistent dashboard header element summarizing sensor health (for example "All sensors online" or "2 faults").
 - **Recording_Indicator**: A persistently visible dashboard element showing whether the system is recording (for example "Not recording" in IDLE, "Recording (alarm)" in ALARM_ACTIVE, "Recording (test)" in TEST).
 - **Rolling_Buffer**: Mode B; a RAM-only two-minute ring buffer that is never displayed, logged, or sent until an alarm, at which point it is frozen into the incident record.
@@ -55,6 +66,19 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 - **Tag_Summary**: The once-per-second serial line an RX_Node emits for each tag heard, in the form TAG,<node_id>,<room_id>,<tag_id>,<packets_heard>,<mean_rssi>,<max_rssi>.
 - **Crew_Marker**: The Dashboard marker, using a distinct icon plus a tag-ID label and never a room-state color, that shows a tagged responder's located room together with the last-heard age.
 - **Tag_Location**: The Hub's estimate of which room a Responder_Tag is in, including the ambiguous values "Between rooms" and "Near Room X / Room Y", reported with a Confidence level.
+- **RX_Mode**: The RX_Node operating mode, set in non-volatile config: HUB_Mode (streams raw CSI over serial to the Hub; the Must path and fallback), EDGE_Mode (computes features, classification, and room state on-device; streams no raw CSI), or TRAINING_Mode (streams raw CSI and FEAT_Lines together; used only with the Training_Tool).
+- **HUB_Mode**: The RX_Mode in which the RX_Node streams raw CSI over serial to the Hub.
+- **EDGE_Mode**: The RX_Mode in which the RX_Node computes Edge_Features, Edge_Model outputs, and room state on-device and streams no raw CSI.
+- **TRAINING_Mode**: The RX_Mode in which the RX_Node streams raw CSI lines and FEAT_Lines together, used only with the Training_Tool.
+- **Edge_Features**: The window features computed on the RX_Node: per-subcarrier variance, per-subcarrier change from the calibrated empty baseline, count of subcarriers over threshold, motion-band energy from one FFT on a signal combined across subcarriers, and 10-second and 30-second rolling statistics.
+- **Edge_Model**: The on-device three-output classifier (empty, moving, still_present): either a tree-ensemble model exported to C (emlearn or m2cgen) or an INT8 TensorFlow Lite Micro dense network of about 5–20 KB with a 3-way softmax.
+- **FEAT_Line**: The serial line carrying device-computed Edge_Features (and Edge_Model outputs when an Edge_Model is loaded) for one window.
+- **Room_State_Packet**: The approximately 20-byte ESP-NOW broadcast (magic value "RSST") an RX_Node sends once per second containing room ID, sequence number, state, Confidence percentage, seconds since last motion, seconds since last presence, packet rate, calibrated flag, Edge_Model version, and the system alarm state with its incident identifier.
+- **Annunciator**: A device that lights one LED or OLED row per room showing the four Room_States by blink pattern; RX1 doubles as the Annunciator in the 2-room demo, and a dedicated battery-backed board is used in deployment.
+- **Parity_Check**: The acceptance test that compares Edge_Features and Edge_Model outputs from the device against the laptop's computation on the same recording.
+- **Commissioned_RX**: An RX_Node whose MAC address is on the commissioned list.
+- **Listener**: Any device that consumes Room_State_Packets, namely another RX_Node, the Annunciator, or the Hub via serial relay.
+- **Hub_Neural_Network**: The CNN+GRU primary classifier of the Detection_Model that runs on the Hub.
 
 ## Requirements
 
@@ -77,11 +101,12 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. THE TX_Node SHALL transmit packets at a configurable fixed rate with a default between 50 and 100 packets per second on a fixed channel selected from channels 1, 6, and 11.
+1. THE TX_Node SHALL transmit ESP-NOW unicast packets to its paired RX_Node at a configurable fixed rate with a default between 50 and 100 packets per second, on a fixed channel selected from channels 1, 6, and 11, using an OFDM physical rate (HT MCS0) so that the RX_Node produces CSI.
 2. WHEN an RX_Node captures a CSI packet, THE RX_Node SHALL filter by the paired TX_Node MAC address and discard packets from any other source.
 3. WHEN an RX_Node forwards a CSI record, THE RX_Node SHALL include node identifier, TX MAC, sequence number, local timestamp, RSSI, channel, and per-subcarrier CSI amplitude in that record.
-4. THE RX_Node SHALL forward CSI records over UART as the primary transport.
-5. WHERE UART transport is unavailable, THE RX_Node SHALL forward CSI records over UDP as the secondary transport.
+4. WHILE in HUB_Mode or TRAINING_Mode, THE RX_Node SHALL forward CSI records to the Hub over USB serial (UART) at a baud rate of at least 921600.
+5. IF the configured packet rate and CSI record size exceed the serial link capacity, THEN THE RoomSense_System SHALL reduce load by lowering the packet rate to 50 packets per second or by forwarding only the L-LTF subcarriers, so that no CSI records are silently truncated.
+6. WHILE in EDGE_Mode, THE RX_Node SHALL NOT forward raw CSI.
 
 ### Requirement 3: Node Configuration, Heartbeats, and Reboot Resilience
 
@@ -89,10 +114,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. THE Node SHALL send a Heartbeat once per second that includes the measured packet rate.
+1. THE RX_Node SHALL send a Heartbeat to the Hub over serial once per second that includes the measured packet rate from its paired TX_Node, the CSI queue drop count, and the current RX_Mode.
 2. THE Node SHALL allow its node identifier and room assignment to be configured without reflashing firmware.
 3. WHEN a Node reboots, THE Node SHALL resume streaming without manual intervention.
 4. WHEN a Node reboots, THE Node SHALL retain its configured node identifier and room assignment.
+5. THE Hub SHALL infer TX_Node health from the paired RX_Node's measured packet rate, and THE Hub SHALL NOT expect Heartbeats from TX_Nodes or Responder_Tags.
 
 ### Requirement 4: Data Pipeline Ingest and Validation
 
@@ -131,6 +157,8 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 3. WHEN reporting evaluation results, THE RoomSense_System SHALL report a confusion matrix, per-class recall, and the false-"empty" rate.
 4. WHEN selecting the primary evaluation metric, THE RoomSense_System SHALL prioritize recall on the moving and still_present classes.
 5. THE Detection_Model SHALL bias its decision threshold toward the Possible presence outcome rather than the No detection outcome.
+6. WHEN training the neural network, THE RoomSense_System SHALL apply subcarrier dropout or subcarrier shuffle augmentation to reduce room-specific fingerprint learning.
+7. WHEN the gradient-boosted-tree baseline outperforms the neural network on held-out-room evaluation, THE RoomSense_System SHALL ship the baseline as the live classifier.
 
 ### Requirement 7: Calibration Mode
 
@@ -151,14 +179,19 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 1. THE State_Engine SHALL assign each room exactly one Room_State from the four valid states Motion detected, Possible presence, No detection, and Unknown/offline.
 2. THE Dashboard SHALL NOT display "empty" as a room state, and THE Dashboard SHALL display only one of the four valid states Motion detected, Possible presence, No detection, and Unknown/offline.
-3. WHEN the Detection_Model reports a moving probability in the high band of at least 80 percent for a room, THE State_Engine SHALL set that room to Motion detected.
-4. WHEN the Detection_Model reports a still_present probability of at least 50 percent for a room, OR WHEN recent motion is followed by stillness within the configured 300-second lookback window, THE State_Engine SHALL set that room to Possible presence.
-5. WHEN the Detection_Model reports empty with high confidence for a room whose link is healthy, where a healthy link means heartbeats have been received within a 10-second window, THE State_Engine SHALL set that room to No detection.
-6. WHILE a room is in Motion detected, THE State_Engine SHALL require a minimum continuous hold of 300 seconds in Possible presence before the room may change to No detection, and THE State_Engine SHALL NOT transition a room directly from Motion detected to No detection.
-7. IF motion or presence reappears during the 300-second hold, THEN THE State_Engine SHALL restart the hold timer.
+3. WHEN the smoothed moving probability for a room is at least 80 percent, where smoothed means at least 2 of the most recent 3 feature windows or the average of the most recent 5 feature windows, THE State_Engine SHALL set that room to Motion detected and update that room's Last_Evidence.
+4. WHEN the smoothed still_present probability for a room is at least 50 percent and the smoothed moving probability for that room is below 80 percent, THE State_Engine SHALL set that room to Possible presence and update that room's Last_Evidence.
+5. WHEN at least 300 seconds have elapsed since a room's Last_Evidence, AND the Detection_Model reports empty with high confidence for that room, AND that room's link is healthy, where a healthy link means an RX Heartbeat has been received within 3 seconds, a fresh classified window has been produced within 5 seconds, and the measured packet rate is at or above the configured minimum, THE State_Engine SHALL set that room to No detection.
+6. WHILE less than 300 seconds have elapsed since a room's Last_Evidence and no current evidence exists for that room and that room is not stale, THE State_Engine SHALL hold that room in Possible presence, and THE State_Engine SHALL NOT transition a room directly from Motion detected to No detection.
+7. WHEN new occupancy evidence is produced for a room at any time, THE State_Engine SHALL reset that room's Last_Evidence to the time of that evidence, restarting the 300-second hold.
 8. THE State_Engine SHALL record a Last_Seen timestamp for each room at 1-second resolution.
 9. THE State_Engine SHALL assign each room a Confidence band of high meaning at least 80 percent, medium meaning 50 to 79 percent, or low meaning less than 50 percent, together with a numeric percentage from 0 to 100.
-10. WHEN a room link is degraded, where a degraded link means no heartbeat has been received within a 10-second window, THE State_Engine SHALL set that room to Unknown/offline and mark its displayed state as stale.
+10. IF no RX Heartbeat has been received for a room's link within 10 seconds, OR no fresh classified window has been produced for that room within 5 seconds, OR the measured packet rate for that room's link is below the configured minimum, THEN THE State_Engine SHALL set that room to Unknown/offline and mark its displayed state as stale.
+11. IF no RX Heartbeat has been received for a room's link within 3 seconds, THEN THE State_Engine SHALL mark that link degraded and set that room's Confidence to low.
+12. THE State_Engine SHALL re-evaluate every room at least once per second independently of feature-window arrival, so that a room with no incoming windows cannot retain a stale state.
+13. WHEN a window is flagged low quality for a room, THE State_Engine SHALL keep that room's current Room_State and set that room's Confidence to low.
+14. THE State_Engine SHALL derive each room's Confidence from both the Detection_Model probability and the link quality, where link quality comprises the measured packet rate and Heartbeat freshness.
+15. WHEN at least 300 seconds have elapsed since a room's Last_Evidence and the Detection_Model reports empty with high confidence on a healthy link for that room, THE State_Engine SHALL transition that room out of Possible presence to No detection.
 
 ### Requirement 9: Search-Priority Ranking
 
@@ -170,6 +203,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 2. THE RoomSense_System SHALL rank every Unknown/offline room above every No detection room in all displayed orderings.
 3. WHEN two rooms share the same Room_State, THE RoomSense_System SHALL break the tie deterministically by ranking the room with the more recent Last_Seen first.
 4. WHEN a node meets the offline condition, defined as no heartbeat received within a 10-second window, THE RoomSense_System SHALL set its room to Unknown/offline and rank that room above No detection rooms within 10 seconds.
+5. THE RoomSense_System SHALL rank every room with a Searched_Mark after every room without a Searched_Mark, preserving Search_Priority order within each group.
 
 ### Requirement 10: Local Offline Dashboard
 
@@ -237,15 +271,18 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHILE in IDLE_State, THE RoomSense_System SHALL persist no occupancy data and SHALL display the Recording_Indicator as "Not recording".
+1. WHILE in IDLE_State, THE RoomSense_System SHALL persist no Occupancy_Data (room states, Confidence, tag positions, and CSI) and SHALL display the Recording_Indicator as "Not recording".
 2. WHILE in IDLE_State, THE RoomSense_System SHALL maintain the mode B Rolling_Buffer in RAM only holding the most recent 120 seconds and SHALL NOT display, log, or transmit its contents.
 3. WHEN an alarm is triggered, THE RoomSense_System SHALL enter ALARM_ACTIVE_State within 2 seconds, activate Fire_Mode, and display the Recording_Indicator as "Recording (alarm)".
 4. WHEN an alarm is triggered, THE RoomSense_System SHALL freeze the Rolling_Buffer into the Incident_Record within 2 seconds.
 5. WHILE in ALARM_ACTIVE_State, THE RoomSense_System SHALL persist only per-room state, Confidence, timestamps, node health events, and searched marks in the Incident_Record, and SHALL persist no other data.
-6. WHERE the RoomSense_System is not in Training mode, THE RoomSense_System SHALL NOT persist raw CSI, identity, imagery, or audio.
+6. THE Hub SHALL NOT persist raw CSI, identity, imagery, or audio, and raw CSI persistence SHALL exist only in the Training_Tool.
 7. THE Dashboard SHALL keep the Recording_Indicator visible at all times.
 8. WHILE in IDLE_State, THE RoomSense_System SHALL report a stored-samples counter value of exactly 0.
-9. IF occupancy data is written while in IDLE_State, THEN THE RoomSense_System SHALL raise a policy-violation fault, reject the write so that persisted storage is unchanged, and display a visible fault indication.
+9. IF Occupancy_Data is written while in IDLE_State, THEN THE RoomSense_System SHALL raise a policy-violation fault, reject the write so that persisted storage is unchanged, and display a visible fault indication.
+10. WHILE in IDLE_State, THE RoomSense_System SHALL allow writes of configuration, calibration baselines, and the Health_Log.
+11. WHEN a responder taps "End incident" while in ALARM_ACTIVE_State, THE RoomSense_System SHALL return to IDLE_State and purge the Incident_Record according to the retention policy.
+12. THE RoomSense_System SHALL support CALIBRATION_State, entered and exited from normal mode by an installer, in which THE RoomSense_System SHALL persist calibration baselines and tag RSSI offsets and SHALL NOT persist Occupancy_Data.
 
 ### Requirement 16: Demo Alarm Trigger
 
@@ -261,14 +298,16 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 ### Requirement 17: Training Data Recording Mode
 
-**User Story:** As an authorized installer, I want a training mode that records raw CSI to disk under access control, so that we can collect labeled data without compromising the deployed privacy posture.
+**User Story:** As an authorized installer, I want a separate training tool that records raw CSI to disk under access control, so that we can collect labeled data without compromising the deployed privacy posture.
 
 #### Acceptance Criteria
 
-1. WHERE Training mode is enabled, THE RoomSense_System SHALL record raw CSI to disk.
-2. THE RoomSense_System SHALL restrict Training mode to authorized installers only.
-3. THE RoomSense_System SHALL authorize exactly two team members to record training data.
-4. WHEN recording a training session, THE RoomSense_System SHALL label the data by one class per file.
+1. THE Training_Tool SHALL record raw CSI to disk as a separate tool/build from the deployed Hub.
+2. THE Training_Tool SHALL restrict recording to authorized installers only.
+3. THE Training_Tool SHALL authorize exactly two team members to record training data.
+4. WHEN recording a training session, THE Training_Tool SHALL label the data by one class per file.
+5. THE Hub SHALL be built with no code path that writes raw CSI to disk.
+6. WHEN recording a training session, THE Training_Tool SHALL record the FEAT_Lines received from the RX_Node together with the raw CSI.
 
 ### Requirement 18: Test and Inspection Mode
 
@@ -296,8 +335,10 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 4. THE Dashboard SHALL display a Health_Chip in the header summarizing sensor health and SHALL open a fault list showing each cause and a suggested action when selected.
 5. WHEN a node fault is active, THE Dashboard SHALL render the affected room as Unknown/offline with a fault indicator and rank that room above No detection rooms.
 6. WHEN a previously offline node returns, THE RoomSense_System SHALL require 10 seconds of healthy heartbeats before removing the Unknown/offline state.
-7. WHERE transmitter-dead versus receiver-dead distinction is supported, IF a receiver is alive but the measured packet rate is below 20 percent for 5 seconds, THEN THE RoomSense_System SHALL report a transmitter-dead fault.
+7. WHERE transmitter-dead versus receiver-dead distinction is supported, IF a receiver is alive but the measured packet rate is below 20 percent for 5 seconds, THEN THE RoomSense_System SHALL report a transmitter-dead fault, and THE RoomSense_System SHALL use this packet-rate check as the sole TX_Node health signal.
 8. WHERE hub-lost detection is supported, IF the hub becomes unreachable for 5 seconds, THEN THE Dashboard SHALL display a full-width hub-lost banner.
+9. WHEN an RX Heartbeat is missing for 3 seconds, THE RoomSense_System SHALL mark that RX_Node degraded.
+10. THE RoomSense_System SHALL write the Health_Log across incidents, including while in IDLE_State, and THE Health_Log SHALL contain no Occupancy_Data.
 
 ### Requirement 20: Reliability and Failure Handling
 
@@ -319,7 +360,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 1. THE RoomSense_System SHALL output per-room occupancy states only and SHALL NOT capture imagery, audio, or identity.
 2. THE RoomSense_System SHALL process all data locally and SHALL NOT use cloud services, accounts, or remote access.
-3. THE RoomSense_System SHALL retain raw CSI only within RAM rolling buffers except in Training mode, and SHALL retain the state timeline for the current session only.
+3. THE Hub SHALL retain raw CSI only within RAM rolling buffers, with disk persistence of raw CSI confined to the Training_Tool, and SHALL retain the state timeline for the current session only.
 4. THE Dashboard SHALL state through its disclaimer that the system is decision support and never replaces a full search.
 5. WHEN raw training recordings are collected, THE RoomSense_System SHALL collect them only from consenting team members.
 
@@ -334,6 +375,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 3. WHEN validating person generalization, THE RoomSense_System SHALL train on two people and test on a third person.
 4. WHEN validating node failure, THE RoomSense_System SHALL verify that a failed node results in an Unknown/offline room within the offline threshold.
 5. WHEN reporting any validation result, THE RoomSense_System SHALL report the confusion matrix, the false-"empty" rate, and the test conditions.
+6. WHEN validating room generalization, THE RoomSense_System SHALL train on Room 1 data, evaluate on Room 2 data, and report the result.
 
 ### Requirement 23: Responder Tag Firmware (FW-8) [Should]
 
@@ -354,7 +396,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHEN an RX_Node receives an ESP-NOW broadcast, THE RX_Node SHALL accept the broadcast only if the broadcast carries the magic value "RSTG" and a commissioned tag ID, and SHALL discard every other broadcast.
+1. WHEN an RX_Node receives an ESP-NOW broadcast, THE RX_Node SHALL accept the broadcast only if the broadcast carries the magic value "RSTG" and a commissioned tag ID, or carries the magic value "RSST" and originates from a Commissioned_RX MAC address, and SHALL discard every other broadcast.
 2. THE RX_Node SHALL process Tag_Packets on a path separate from the CSI pipeline and SHALL exclude Tag_Packets from CSI processing.
 3. WHEN an RX_Node reads a received Tag_Packet, THE RX_Node SHALL read the RSSI value from the ESP-NOW receive callback.
 4. Once per second, for each tag heard during that second, THE RX_Node SHALL emit a Tag_Summary line over serial containing node_id, room_id, tag_id, packets_heard, mean_rssi, and max_rssi.
@@ -367,12 +409,13 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 #### Acceptance Criteria
 
 1. THE Hub SHALL maintain a smoothed RSSI value per tag-and-room pair using an exponentially weighted moving average with a time constant of approximately 2 seconds, adjusted by a per-room offset learned during calibration.
-2. THE Hub SHALL select as the candidate room the room with the highest adjusted smoothed RSSI for the tag.
-3. THE Hub SHALL switch the Tag_Location to the candidate room IF the candidate room leads the current room by at least 6 decibels for at least 2 seconds, OR IF the current room has not heard the tag for 3 seconds.
-4. THE Hub SHALL assign the Tag_Location a Confidence of high WHEN the lead is at least 10 decibels and at least 2 rooms hear the tag, a Confidence of medium WHEN the lead is between 6 and 10 decibels, and a Confidence of low otherwise or WHEN the leading room's link is degraded.
+2. THE Hub SHALL select as the candidate room the room with the highest adjusted smoothed RSSI for the tag, using a floor RSSI of -95 dBm for every room that did not hear the tag in the current interval.
+3. WHEN the candidate room leads the current located room by at least 6 decibels continuously for at least 2 seconds, OR WHEN the current located room has not heard the tag for 3 seconds, THE Hub SHALL switch the Tag_Location to the candidate room.
+4. THE Hub SHALL assign the Tag_Location a Confidence of high WHEN the leading room's lead over every other room, using the -95 dBm floor for silent rooms, is at least 10 decibels regardless of how many rooms hear the tag, a Confidence of medium WHEN that lead is between 6 and 10 decibels, and a Confidence of low otherwise or WHEN the leading room's link is degraded.
 5. WHILE the Tag_Location Confidence is low, THE Dashboard SHALL display the location as "Near Room X / Room Y" and SHALL display no single room for that tag.
 6. WHEN a tag is heard weakly by several rooms and no room meets the lead threshold, THE Dashboard SHALL display the Tag_Location as "Between rooms".
 7. IF a tag has not been heard for 10 seconds, THEN THE Dashboard SHALL display a hollow Crew_Marker showing the last-heard room and the elapsed time, for example "Last heard Room 2, 0:40 ago", and SHALL NOT extrapolate the tag position.
+8. WHEN the candidate room changes, THE Hub SHALL reset the 2-second lead timer.
 
 ### Requirement 26: Crew Marker and "You Are Here" Dashboard [Should for marker; Could for "You are here"]
 
@@ -383,7 +426,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 1. WHILE in Fire_Mode, THE Dashboard SHALL display a Crew_Marker in the tag's located room using a distinct icon and the tag-ID label, and SHALL NOT use a room-state color for the Crew_Marker.
 2. THE Dashboard SHALL display the last-heard age of each Crew_Marker.
 3. THE Dashboard SHALL display a per-floor count of crews on each floor tab.
-4. WHERE a device is bound to a tag selected from a list in normal mode, THE Dashboard SHALL display "You are here" at the tag's Tag_Location and SHALL auto-switch to the tag's floor.
+4. WHERE a device is bound to a tag selected from a list in normal mode, THE Dashboard SHALL display "You are here" at the tag's Tag_Location and SHALL auto-switch to the tag's floor, where the tag-bound device is a second device (for example an iPhone) joined to the laptop's hotspot, preferably on 5 GHz to keep traffic off the sensing channel [Could].
 5. WHILE in Fire_Mode, THE Dashboard SHALL NOT require typing to bind a device to a tag.
 6. IF a tag is silent for 10 seconds during an incident, THEN THE Health_Chip SHALL show a fault identifying the tag and its last-heard room, for example "E1 tag not heard. Last heard Room 2.".
 
@@ -406,9 +449,10 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHEN performing the room calibration walk-through while the installer wears the tag, THE Calibration_Mode SHALL record each room's tag RSSI to set a per-room offset.
-2. WHEN calibrating a room with the tag at that room's center, THE Calibration_Mode SHALL verify that the room hears the tag strongest.
-3. WHEN calibrating, THE Calibration_Mode SHALL record doorway RSSI values to tune the switching margin.
+1. WHILE in CALIBRATION_State, WHEN performing the room calibration walk-through while the installer wears the tag, THE Calibration_Mode SHALL record each room's tag RSSI to set a per-room offset.
+2. WHILE in CALIBRATION_State, WHEN calibrating a room with the tag at that room's center, THE Calibration_Mode SHALL verify that the room hears the tag strongest.
+3. WHILE in CALIBRATION_State, WHEN calibrating, THE Calibration_Mode SHALL record doorway RSSI values to tune the switching margin.
+4. THE Calibration_Mode SHALL run tag calibration only in CALIBRATION_State.
 
 ### Requirement 29: Tag Privacy and Recording [Should]
 
@@ -416,10 +460,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. THE RoomSense_System SHALL process Tag_Summaries only WHILE in ALARM_ACTIVE_State or Test_Mode.
-2. WHILE in IDLE_State, THE RoomSense_System SHALL drop all Tag_Summaries.
+1. WHILE in ALARM_ACTIVE_State, Test_Mode, or CALIBRATION_State, THE RoomSense_System SHALL process Tag_Summaries.
+2. WHILE in IDLE_State and not in CALIBRATION_State, THE RoomSense_System SHALL drop all Tag_Summaries.
 3. THE RoomSense_System SHALL locate only commissioned tag IDs.
-4. WHILE in ALARM_ACTIVE_State, THE RoomSense_System SHALL include tag positions in the Incident_Record under the existing retention rules.
+4. WHILE in ALARM_ACTIVE_State, THE RoomSense_System SHALL include tag positions in the Incident_Record under the existing retention rules, and THE RoomSense_System SHALL persist tag positions only in the Incident_Record.
+5. WHILE in CALIBRATION_State, THE RoomSense_System SHALL persist only per-room tag RSSI offsets and SHALL NOT persist tag positions.
 
 ### Requirement 30: Tag Localization Failure Handling [Should]
 
@@ -427,6 +472,99 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHEN the RX_Node in a tag's actual room is offline, THE Hub SHALL force the Tag_Location Confidence to low and SHALL display "Near Room X / Room Y" rather than a single room.
+1. WHEN any RX_Node is offline AND the leading adjusted smoothed RSSI for a tag is below -75 dBm, THE Hub SHALL force that tag's Tag_Location Confidence to low and THE Dashboard SHALL display "Near Room X / Room Y" rather than a single room.
 2. WHEN a Responder_Tag loses power or crashes, THE Dashboard SHALL display a hollow Crew_Marker and THE Health_Chip SHALL raise a tag fault.
-3. THE RoomSense_System SHALL treat the tag localization thresholds, including the 6-decibel lead, the 2-second lead duration, the 3-second silence window, the 10-second lost-tag window, and the decibel Confidence bands, as calibration-tunable starting values.
+3. THE RoomSense_System SHALL treat the tag localization thresholds, including the 6-decibel lead, the 2-second lead duration, the 3-second silence window, the 10-second lost-tag window, the decibel Confidence bands, the -95 dBm silent-room floor, and the -75 dBm weak-signal threshold, as calibration-tunable starting values.
+
+### Requirement 31: Edge Feature Extraction on the RX [Should]
+
+**User Story:** As a developer, I want each RX_Node to compute window features from its own CSI, so that detection can run without streaming raw CSI to the Hub.
+
+#### Acceptance Criteria
+
+1. WHILE in EDGE_Mode or TRAINING_Mode, THE RX_Node SHALL compute Edge_Features for each window from the CSI of its own paired link.
+2. WHEN the CSI receive callback accepts a CSI frame, THE RX_Node SHALL only copy that frame into a frame queue within the callback, and THE RX_Node SHALL run feature extraction and classification in a separate task pinned to core 1.
+3. IF the frame queue is full when a CSI frame is accepted, THEN THE RX_Node SHALL drop that frame, increment the CSI queue drop count, and report the CSI queue drop count in its Heartbeat.
+4. WHILE in EDGE_Mode or TRAINING_Mode, THE RX_Node SHALL complete feature extraction and classification for each window before the next window starts (calibration-tunable starting value).
+5. WHEN computing motion-band energy for a window, THE RX_Node SHALL compute one FFT per window on a single signal combined across subcarriers.
+6. THE RX_Node SHALL compute the 10-second and 30-second rolling statistics from per-window aggregates rather than from raw CSI frames.
+
+### Requirement 32: Edge Classifier [Should]
+
+**User Story:** As a developer, I want a compact on-device classifier, so that each RX_Node can classify occupancy without the Hub.
+
+#### Acceptance Criteria
+
+1. WHEN the Edge_Model receives Edge_Features for a window, THE Edge_Model SHALL output probabilities over exactly the three classes empty, moving, and still_present, where each probability is bounded between 0.0 and 1.0 inclusive and the three probabilities sum to 1.0 within a tolerance of 0.01.
+2. THE RoomSense_System SHALL ship as the Edge_Model whichever of the C-exported tree-ensemble model or the INT8 TensorFlow Lite Micro dense network performs better on session-held-out evaluation, weighting recall on the moving and still_present classes first.
+3. THE RoomSense_System SHALL run the Hub_Neural_Network only on the Hub and SHALL NOT deploy the Hub_Neural_Network to RX_Nodes.
+4. WHEN an RX_Node sends a Room_State_Packet, THE RX_Node SHALL include the loaded Edge_Model version in that Room_State_Packet.
+
+### Requirement 33: Training/Device Parity [Should]
+
+**User Story:** As a developer, I want the device and laptop computations proven equivalent, so that a model trained on the laptop behaves the same on the RX_Node.
+
+#### Acceptance Criteria
+
+1. WHILE in TRAINING_Mode, THE RX_Node SHALL stream raw CSI lines and FEAT_Lines together over serial.
+2. WHEN the RX_Node emits a FEAT_Line, THE RX_Node SHALL identify in that FEAT_Line the CSI frames the FEAT_Line was computed from by sequence range and frame count.
+3. THE RoomSense_System SHALL train the Edge_Model on device-computed Edge_Features, taken either from recorded FEAT_Lines or regenerated from recorded raw CSI by the same feature-extraction source code compiled for the laptop.
+4. WHEN an Edge_Model is flashed to an RX_Node for EDGE_Mode, THE RoomSense_System SHALL accept the Edge_Model only after the Parity_Check has passed on the same recording.
+5. THE Parity_Check SHALL pass only WHEN Edge_Features agree within a configured tolerance, the argmax class agrees on at least 99 percent of windows, and per-class probabilities differ by at most 0.02 (calibration-tunable starting values).
+6. IF the Parity_Check fails, THEN THE RX_Node SHALL remain in HUB_Mode.
+
+### Requirement 34: Edge State Engine and Calibration Storage [Should]
+
+**User Story:** As a responder, I want each RX_Node to hold an honest room state on its own, so that room state survives loss of the Hub.
+
+#### Acceptance Criteria
+
+1. WHILE in EDGE_Mode, THE RX_Node SHALL run the state-engine core for its room, comprising the Last_Evidence hold, seconds since last motion and seconds since last presence, low Confidence on poor link quality, and transmitter-dead detection from its measured packet rate, using the same thresholds as Requirements 8 and 19.
+2. WHEN calibration completes for a room, THE RX_Node SHALL store that room's calibration baseline in non-volatile flash.
+3. WHEN the RX_Node reboots, THE RX_Node SHALL load the stored calibration baseline from non-volatile flash.
+4. IF no calibration baseline is stored, THEN THE RX_Node SHALL report its room as uncalibrated and Unknown/offline.
+5. WHEN the RX state-engine core and the Hub State_Engine receive the same input sequence, THE RX state-engine core SHALL produce the same Room_State sequence as the Hub State_Engine.
+
+### Requirement 35: Room-State Broadcast and Listeners [Should]
+
+**User Story:** As a responder, I want room state broadcast between nodes, so that any Listener can show room state with the Hub disconnected.
+
+#### Acceptance Criteria
+
+1. WHILE in EDGE_Mode, THE RX_Node SHALL broadcast a Room_State_Packet once per second via ESP-NOW on the fixed sensing channel.
+2. WHEN an RX_Node receives a Room_State_Packet, THE RX_Node SHALL exclude that Room_State_Packet from CSI processing by the paired TX_Node MAC address filter.
+3. WHEN a Listener receives a Room_State_Packet, THE Listener SHALL accept that Room_State_Packet only if the Room_State_Packet originates from a Commissioned_RX MAC address.
+4. IF a Listener has received no Room_State_Packet for a room for 3 seconds, THEN THE Listener SHALL show that room as Unknown/offline.
+5. IF a Listener has received no Room_State_Packet for a room for 10 seconds, THEN THE Listener SHALL mark that room's RX_Node offline.
+6. WHILE in IDLE_State, THE RX_Node SHALL withhold the occupancy fields (state, Confidence percentage, seconds since last motion, and seconds since last presence) from each over-the-air Room_State_Packet and SHALL carry only the health fields (packet rate, calibrated flag, Edge_Model version, and alarm state).
+7. WHILE in IDLE_State and connected to the Hub over serial, THE RX_Node SHALL send full room state to the Hub over serial for use only by the RAM-only Rolling_Buffer, consistent with Requirement 15.2.
+8. WHEN ALARM_ACTIVE_State is entered, THE RX_Node SHALL begin broadcasting full room state in each Room_State_Packet within 2 seconds.
+9. WHEN an RX_Node receives an alarm command from the Hub over serial, or receives a Room_State_Packet from a Commissioned_RX carrying the alarm state for the current or a newer incident identifier, THE RX_Node SHALL latch the alarm state.
+10. WHEN the RX_Node receives an End incident command, THE RX_Node SHALL apply the End incident command only if the command arrives directly from the Hub over serial, and SHALL discard any End incident indication received over the air.
+
+### Requirement 36: Annunciator [Should]
+
+**User Story:** As a responder, I want a simple per-room indicator that works without the laptop, so that I can still see room state if the Hub is lost.
+
+#### Acceptance Criteria
+
+1. THE Annunciator SHALL display one LED or OLED row per room showing the four Room_States, distinguishing each Room_State by blink pattern on LEDs or by icon and text on OLED in addition to any color.
+2. IF the Annunciator has received no Room_State_Packet for a room for 3 seconds, THEN THE Annunciator SHALL show that room as Unknown/offline.
+3. THE Annunciator SHALL display only the four valid Room_States Motion detected, Possible presence, No detection, and Unknown/offline, and SHALL NOT display "empty".
+4. THE Annunciator SHALL show a self-alive indicator so that a dark display is distinguishable from every Room_State.
+5. WHILE in IDLE_State, THE Annunciator SHALL show link health only and SHALL show no occupancy.
+6. WHILE the Hub is disconnected, THE Annunciator SHALL continue displaying room state from received Room_State_Packets.
+
+### Requirement 37: Laptop-Optional Operation and Deployed Privacy [Should]
+
+**User Story:** As a responder and as an occupant, I want detection and display to survive loss of the laptop without exposing raw CSI, so that the system is resilient and private.
+
+#### Acceptance Criteria
+
+1. WHILE all RX_Nodes are in EDGE_Mode, THE RoomSense_System SHALL continue detection, room state, and Annunciator display with the Hub disconnected or the Hub process stopped, including during Fire_Mode.
+2. WHILE the Hub is connected and the RX_Nodes are in EDGE_Mode, THE Hub SHALL provide the Dashboard, Crew_Markers, Incident_Record, and training, using Room_State_Packet data relayed over serial as the room-state source.
+3. WHILE in EDGE_Mode, THE RX_Node SHALL transmit only derived room state and health data, and SHALL NOT transmit raw CSI over serial or over the air.
+4. THE RX_Node SHALL transmit raw CSI over serial only in TRAINING_Mode or HUB_Mode, where HUB_Mode is the hackathon fallback and not the deployed configuration.
+5. THE RoomSense_System SHALL present the claim "no single point of failure for detection and display" only for configurations in which both the Annunciator and the Hub Dashboard are available, SHALL NOT claim immunity to power loss, and SHALL state that every Node requires battery backup in deployment.
+6. THE RoomSense_System SHALL document that in the 2-room demo RX1 is both a sensor and the Annunciator, and is therefore a shared point of failure for Room 1 and, with the laptop unplugged, for display.
+7. WHEN the laptop is disconnected during the demo, THE RoomSense_System SHALL keep the RX_Nodes powered from a self-powered USB hub or power banks, or the demo SHALL stop the Hub process instead of removing power.

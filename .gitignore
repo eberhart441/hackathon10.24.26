@@ -1,0 +1,26 @@
+# IMPORTANT: do NOT ignore .kiro/ (or anything inside it).
+# The Hackachusetts rules require /.kiro at the repo root; ignoring it can disqualify the submission.
+
+# PlatformIO / build output
+.pio/
+.vscode/
+build/
+*.elf
+*.bin
+
+# Secrets: never commit real credentials (WiFi passwords, API tokens, ntfy topics)
+.env
+secrets.h
+**/secrets.h
+*.local.json
+
+# Python / Node (simulator and MCP servers)
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

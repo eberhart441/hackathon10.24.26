@@ -47,7 +47,8 @@ WEAK_MEAN_AMP = 4.0   # average subcarrier strength below this is basically no s
 WEAK_ACTIVITY = 0.2   # a real room never wobbles by exactly nothing; flat means blocked or dead
 GLITCH_FRACTION = 0.4 # a packet whose overall strength is this far from typical is counted as a glitch
 # A receiver is "obviously off" and left out of the location estimate when any of these hold.
-OFF_MIN_RATE = 40         # CSI lines/s; healthy links run at about 95 to 105
+OFF_MIN_RATE_SHARE = 0.4  # CSI lines/s below this share of the link's recent best rate (was 40 of about 100)
+RATE_PEAK_DECAY = 0.9995  # per 0.1 s tick: the remembered best rate fades over a few minutes
 OFF_GLITCHES_10S = 15     # glitch packets in the last 10 s; healthy links show about 3
 OFF_CLIPPED = 0.25        # share of subcarriers stuck at 255 (too close to the transmitter, or gain wrong)
 # USB-serial chips found on ESP32 boards; Bluetooth serial ports are skipped
@@ -165,7 +166,11 @@ class NodeView:
             return "weak or blocked signal"
         if self.state == "warming":
             return "warming up"
-        if rate < OFF_MIN_RATE:
+        # Relative, not a fixed number: a relay gateway sends 50/s, a cabled link about 100/s. Expected is
+        # what the board says it received (heartbeat) or this link's recent best, whichever is higher.
+        self.rate_peak = max(rate, getattr(self, "rate_peak", 0.0) * RATE_PEAK_DECAY)
+        expected = max(self.rate_peak, self.heartbeat.measured_pps if self.heartbeat else 0)
+        if rate < OFF_MIN_RATE_SHARE * expected:
             return f"losing packets ({rate}/s)"
         recent = sum(1 for t in self.glitch_times if now - t <= 10.0)
         if recent > OFF_GLITCHES_10S:

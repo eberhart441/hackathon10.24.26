@@ -129,6 +129,25 @@ The picture and positions are saved in `tools/site/` (git-ignored, since a real 
 
 Leave the room empty for the first ~5 seconds after starting (each link learns its quiet level; press **Reset baseline** to relearn), then walk through it. `--port COMx` reads only the ports you list; `--layout FILE` uses fixed positions from a JSON file instead of the app.
 
+## Relay mode (EXPERIMENTAL, branch `feat/relay-experimental` only)
+
+Only one board, the **gateway transmitter**, is cabled to the laptop; up to 4 receivers send their lines to it over the air (ESP-NOW) and run on any power source. The viewer reads the gateway's one port and sees the same lines as before.
+
+**Not merged to main on purpose:** it forwards raw CSI over the air, which conflicts with Privacy Rule 1 in `CONTEXT.md`, and the relay traffic shares the sensing channel (its effect on detection is not measured). See the open question there.
+
+The prebuilt image on this branch is the one built from commit 8e827f8 (relay mode); the later firmware cleanup on main changed no behaviour. Rebuild from this branch's source with ESP-IDF to refresh it.
+
+```powershell
+.\flash.ps1 -Port COMx                                         # every board gets this branch's image
+cd tools
+.\.venv\Scripts\rs-setup.exe tx COM8 --id TX1                     # the gateway, outside the room, stays on USB
+.\.venv\Scripts\rs-setup.exe rx COM8 --id RX1 --tx TX1 --relay-to TX1   # each receiver (swap boards on the same port)
+.\.venv\Scripts\rs-setup.exe gateway COM8 --id TX1                # last, with TX1 plugged in again
+.\.venv\Scripts\rs-view.exe --port COM8
+```
+
+`rs-setup gateway` lists the receivers that relay to it (from `boards.json`, at most 4) and lowers the gateway's rate to 50 packets/s: four receivers at 100/s would be about 130 KB/s, more than the gateway's 921600-baud USB link carries (about 92 KB/s). A receiver may listen to a different transmitter than the one it relays to. The viewer judges packet loss against what each board says it received, so 50/s is not shown as loss.
+
 ## Build from source
 
 Needs ESP-IDF v6.0 (install with Espressif's `eim`, with the `mcp` feature if you want Kiro to drive the build). The first build downloads the `esp_csi_gain_ctrl` component, so it needs internet.

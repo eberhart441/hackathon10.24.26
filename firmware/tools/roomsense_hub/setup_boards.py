@@ -5,6 +5,13 @@
     rs-setup rx COM9 --id RX1 --tx TX1     make the board a receiver paired to TX1
     rs-setup info COM9                     print a board's saved settings
 
+Relay mode (EXPERIMENTAL, needs the relay firmware from the feat/relay-experimental branch): only one
+transmitter, the gateway, is cabled to the laptop; receivers send their lines to it over the air.
+
+    rs-setup tx COM8 --id TX1                         the gateway transmitter (stays on USB)
+    rs-setup rx COM9 --id RX1 --tx TX1 --relay-to TX1 each receiver; then it needs only power
+    rs-setup gateway COM8 --id TX1                    last: tell the gateway which receivers to print
+
 Transmitter MACs are remembered in boards.json next to this package, so `--tx TX1` works even
 after TX1 is unplugged. Plug in one board at a time if you are unsure which COM port is which.
 """
@@ -18,6 +25,7 @@ from pathlib import Path
 
 BOARDS_FILE = Path(__file__).resolve().parent.parent / "boards.json"
 BOOT_WAIT_S = 2.5
+MAX_RELAYS = 4  # receivers one gateway can print (firmware limit)
 
 
 def _open(port: str, baud: int):
@@ -56,9 +64,9 @@ def _load_boards() -> dict:
         return {}
 
 
-def _save_board(node_id: str, mac: str, role: str) -> None:
+def _save_board(node_id: str, mac: str, role: str, **extra: str) -> None:
     boards = _load_boards()
-    boards[node_id] = {"mac": mac, "role": role}
+    boards[node_id] = {"mac": mac, "role": role, **extra}
     BOARDS_FILE.write_text(json.dumps(boards, indent=2) + "\n", encoding="utf-8")
 
 
@@ -71,7 +79,10 @@ def _configure(port: str, baud: int, settings: dict[str, str]) -> dict[str, str]
         replies = _command(ser, f"SET {pairs}")
         errors = [r for r in replies if r.startswith("ERR")]
         if errors:
-            raise SystemExit(f"{port}: board rejected settings: {', '.join(errors)}")
+            hint = ""
+            if any(k in settings for k in ("relay_to", "relays")) and any("unknown" in e or "key" in e for e in errors):
+                hint = " This board has firmware without relay mode: flash the relay image first (feat/relay-experimental)."
+            raise SystemExit(f"{port}: board rejected settings: {', '.join(errors)}.{hint}")
         cfg = _config(ser)
         _command(ser, "REBOOT", wait_s=0.3)
     return cfg
@@ -111,17 +122,46 @@ def cmd_tx(args) -> int:
     return 0
 
 
+def _tx_mac(name: str) -> str:
+    known = _load_boards().get(name)
+    if not known or known.get("role") != "tx":
+        raise SystemExit(f"Unknown transmitter {name}. Run 'rs-setup tx' on it first, or pass a MAC.")
+    return known["mac"]
+
+
 def cmd_rx(args) -> int:
-    mac = args.tx_mac
-    if not mac:
-        known = _load_boards().get(args.tx)
-        if not known:
-            raise SystemExit(f"Unknown transmitter {args.tx}. Run 'rs-setup tx' on it first, or pass --tx-mac.")
-        mac = known["mac"]
-    cfg = _configure(args.port, args.baud, {"node_id": args.id, "room_id": args.room, "role": "rx",
-                                            "channel": str(args.channel), "paired_tx": mac.lower()})
-    _save_board(args.id, cfg.get("mac", "?"), "rx")
+    mac = args.tx_mac or _tx_mac(args.tx)
+    settings = {"node_id": args.id, "room_id": args.room, "role": "rx",
+                "channel": str(args.channel), "paired_tx": mac.lower()}
+    extra = {}
+    if args.relay_to:
+        settings["relay_to"] = _tx_mac(args.relay_to)
+        extra["relay_to"] = args.relay_to
+    cfg = _configure(args.port, args.baud, settings)
+    _save_board(args.id, cfg.get("mac", "?"), "rx", **extra)
     print(f"{args.id} on {args.port} is a receiver paired to {args.tx or mac}. Rebooting.")
+    if args.relay_to:
+        print(f"It relays to {args.relay_to}: unplug it and power it from anything. "
+              f"When all receivers are set up: rs-setup gateway COMx --id {args.relay_to}")
+    return 0
+
+
+def cmd_gateway(args) -> int:
+    """Tell a transmitter which receivers' relayed lines to print (relay mode)."""
+    boards = _load_boards()
+    if boards.get(args.id, {}).get("role") != "tx":
+        raise SystemExit(f"{args.id} is not a transmitter set up with rs-setup tx.")
+    rx = sorted((name, b["mac"]) for name, b in boards.items()
+                if b.get("role") == "rx" and b.get("relay_to") == args.id)
+    if not rx:
+        raise SystemExit(f"No receiver relays to {args.id} yet: rs-setup rx COMx --id RX1 --tx TX1 --relay-to {args.id}")
+    if len(rx) > MAX_RELAYS:
+        raise SystemExit(f"{len(rx)} receivers relay to {args.id}; the firmware takes at most {MAX_RELAYS}.")
+    settings = {"relays": ",".join(mac for _, mac in rx), "pps": str(args.pps)}
+    _configure(args.port, args.baud, settings)
+    names = ", ".join(name for name, _ in rx)
+    print(f"{args.id} on {args.port} now prints the data of {names}, and transmits {args.pps} packets/s. Rebooting.")
+    print(f"Keep {args.id} plugged in and run:  rs-view --port {args.port}")
     return 0
 
 
@@ -143,7 +183,15 @@ def main(argv: list[str] | None = None) -> int:
             g = s.add_mutually_exclusive_group(required=True)
             g.add_argument("--tx", help="node name of the transmitter set up earlier with 'rs-setup tx'")
             g.add_argument("--tx-mac", help="the transmitter's MAC, if it was not set up with rs-setup")
+            s.add_argument("--relay-to", metavar="TX",
+                           help="EXPERIMENTAL relay mode: send this receiver's data over the air to this gateway transmitter")
         s.set_defaults(fn=fn)
+    gw = sub.add_parser("gateway", help="EXPERIMENTAL relay mode: tell a transmitter which receivers to print")
+    gw.add_argument("port")
+    gw.add_argument("--id", required=True, help="the gateway transmitter, for example TX1")
+    gw.add_argument("--pps", type=int, default=50,
+                    help="packets/s the gateway transmits; 50 keeps four relayed receivers within its USB speed")
+    gw.set_defaults(fn=cmd_gateway)
     args = p.parse_args(argv)
     return args.fn(args)
 

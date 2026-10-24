@@ -55,6 +55,23 @@ static void print_config(void)
     rs_out_printf("CFG,paired_tx=%s", mac);
     rs_out_printf("CFG,tag_id=%s", c->tag_id);
     rs_out_printf("CFG,tags=%s", c->tags);
+    if (rs_mac_is_zero(c->relay_to)) {
+        rs_out_printf("CFG,relay_to=off");
+    } else {
+        rs_mac_format(c->relay_to, mac);
+        rs_out_printf("CFG,relay_to=%s", mac);
+    }
+    char list[RS_MAX_RELAYS * 18 + 1] = "none";
+    for (int i = 0; i < c->relay_count; i++) {
+        rs_mac_format(c->relays[i], mac);
+        if (i == 0) {
+            strlcpy(list, mac, sizeof(list));
+        } else {
+            strlcat(list, ";", sizeof(list)); /* ';' because CFG replies are comma separated */
+            strlcat(list, mac, sizeof(list));
+        }
+    }
+    rs_out_printf("CFG,relays=%s", list);
     rs_out_printf("CFG,rx_mode=HUB");
     if (esp_read_mac(factory, ESP_MAC_WIFI_STA) == ESP_OK) {
         rs_mac_format(factory, mac);

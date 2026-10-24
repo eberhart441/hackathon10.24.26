@@ -18,6 +18,12 @@ void rs_mac_format(const uint8_t mac[6], char out[18]);
 
 bool rs_mac_is_broadcast(const uint8_t mac[6]);
 
+bool rs_mac_is_zero(const uint8_t mac[6]);
+
+/* Parse "aa:..:ff,bb:..:ff" into up to `max` MACs. "none" or "" gives zero entries.
+ * Returns the count, or -1 if anything is malformed or there are too many. */
+int rs_mac_list_parse(const char *s, uint8_t out[][6], int max);
+
 /* sqrt(imag^2 + real^2) scaled by `gain`, clipped to 0..255. */
 uint8_t rs_amplitude(int8_t imag, int8_t real, float gain);
 

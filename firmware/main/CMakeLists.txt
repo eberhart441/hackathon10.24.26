@@ -10,7 +10,6 @@ idf_component_register(
         "rs_tx.c"
         "rs_rx.c"
         "rs_tag.c"
-        "rs_relay.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
         nvs_flash

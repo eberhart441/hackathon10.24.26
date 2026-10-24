@@ -60,46 +60,6 @@ bool rs_mac_is_broadcast(const uint8_t mac[6])
     return true;
 }
 
-bool rs_mac_is_zero(const uint8_t mac[6])
-{
-    for (int i = 0; i < 6; i++) {
-        if (mac[i] != 0) {
-            return false;
-        }
-    }
-    return true;
-}
-
-int rs_mac_list_parse(const char *s, uint8_t out[][6], int max)
-{
-    if (s == NULL) {
-        return -1;
-    }
-    if (s[0] == '\0' || strcmp(s, "none") == 0) {
-        return 0;
-    }
-    int count = 0;
-    const char *p = s;
-    for (;;) {
-        const char *end = strchr(p, ',');
-        size_t len = end ? (size_t)(end - p) : strlen(p);
-        char item[18];
-        if (len != 17 || count >= max) {
-            return -1;
-        }
-        memcpy(item, p, 17);
-        item[17] = '\0';
-        if (!rs_mac_parse(item, out[count]) || (out[count][0] & 0x01) != 0) {
-            return -1;
-        }
-        count++;
-        if (end == NULL) {
-            return count;
-        }
-        p = end + 1;
-    }
-}
-
 uint8_t rs_amplitude(int8_t imag, int8_t real, float gain)
 {
     float mag = sqrtf((float)(imag * imag + real * real)) * gain;

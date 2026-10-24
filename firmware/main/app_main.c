@@ -19,7 +19,6 @@
 #include "rs_out.h"
 #include "rs_proto.h"
 #include "rs_radio.h"
-#include "rs_relay.h"
 #include "rs_rx.h"
 #include "rs_tag.h"
 #include "rs_tx.h"
@@ -40,12 +39,9 @@ static void report_task(void *arg)
         /* Receivers only: transmitters and tags have no serial link to the hub at runtime and
          * send no heartbeat (requirement 3.5). The hub infers their health from this line. */
         uint32_t uptime_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        /* csi_q_drops counts every record this receiver could not deliver: output-queue drops
-         * plus, when relaying, lines the relay could not get to the master. */
         size_t n = rs_fmt_hb(line, sizeof(line), s_live.node_id, s_live.room_id, paired, CONFIG_RS_FW_VERSION,
-                             uptime_ms, rs_rx_take_count(), esp_get_free_heap_size(),
-                             rs_rx_dropped() + rs_relay_dropped(), "HUB");
-        rs_data_write(line, n);
+                             uptime_ms, rs_rx_take_count(), esp_get_free_heap_size(), rs_rx_dropped(), "HUB");
+        rs_out_write(line, n);
         rs_rx_emit_tag_summaries(&s_live);
     }
 }
@@ -68,10 +64,8 @@ void app_main(void)
     switch (s_live.role) {
     case RS_ROLE_TX:
         rs_tx_start(&s_live);
-        rs_relay_start_gateway(&s_live); /* only if relays are configured */
         break;
     case RS_ROLE_RX:
-        rs_relay_init_sender(&s_live); /* only if relay_to is set */
         rs_rx_start(&s_live);
         xTaskCreate(report_task, "rs_report", 4096, NULL, 5, NULL);
         break;

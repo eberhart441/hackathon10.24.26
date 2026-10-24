@@ -163,21 +163,36 @@ class Hub:
         self.lock = threading.Lock()
         self.nodes: dict[str, NodeView] = {}
         self.errors: dict[str, str] = {}
+        self.port_nodes: dict[str, set[str]] = {}
         self.clients: list["queue.Queue[str]"] = []
         self.clients_lock = threading.Lock()
 
-    def feed_line(self, line: str, now: float | None = None) -> None:
+    def feed_line(self, line: str, now: float | None = None, port: str | None = None) -> None:
         now = time.time() if now is None else now
         rec = parse_line(line)
         if rec is None:
             return
         with self.lock:
+            if port is not None and hasattr(rec, "node_id"):
+                self.port_nodes.setdefault(port, set()).add(rec.node_id)
             if isinstance(rec, CsiRecord):
                 self._node(rec.node_id).add_csi(rec, now)
             elif isinstance(rec, Heartbeat):
                 self._node(rec.node_id).add_heartbeat(rec, now)
             elif isinstance(rec, TagSummary):
                 self._node(rec.node_id).add_tag(rec, now)
+
+    def port_reset(self, port: str) -> None:
+        """A port was (re)opened. Packets the board sent while we were not reading are not
+        'lost' by the board, so forget the old sequence history for the nodes on that port."""
+        with self.lock:
+            for node_id in self.port_nodes.get(port, ()):
+                node = self.nodes.get(node_id)
+                if node is not None:
+                    node.trackers.clear()
+                    node.window.clear()
+                    node.times.clear()
+                    node.pending.clear()
 
     def _node(self, node_id: str) -> NodeView:
         return self.nodes.setdefault(node_id, NodeView(node_id))
@@ -217,17 +232,25 @@ class Hub:
 
 
 def serial_reader(hub: Hub, port: str, baud: int, stop: threading.Event) -> None:
+    """Read one port forever. If the port is busy or the board is unplugged, show the problem
+    on the page and keep retrying, so replugging a board just works."""
     import serial  # imported here so the rest of the package works without pyserial
 
-    try:
-        with serial.Serial(port, baud, timeout=0.2) as ser:
-            while not stop.is_set():
-                raw = ser.readline()
-                if raw:
-                    hub.feed_line(raw.decode("utf-8", errors="replace"))
-    except (serial.SerialException, OSError) as exc:
-        with hub.lock:
-            hub.errors[port] = str(exc)
+    while not stop.is_set():
+        try:
+            with serial.Serial(port, baud, timeout=0.2) as ser:
+                with hub.lock:
+                    hub.errors.pop(port, None)
+                hub.port_reset(port)
+                ser.reset_input_buffer()
+                while not stop.is_set():
+                    raw = ser.readline()
+                    if raw:
+                        hub.feed_line(raw.decode("utf-8", errors="replace"), port=port)
+        except (serial.SerialException, OSError) as exc:
+            with hub.lock:
+                hub.errors[port] = str(exc)
+            stop.wait(2.0)
 
 
 def replay_reader(hub: Hub, path: Path, stop: threading.Event) -> None:

@@ -136,3 +136,23 @@ def test_two_receivers_are_tracked_independently():
 
 def test_the_page_has_the_room_overview_and_the_weak_signal_label():
     assert "drawRoom" in PAGE and "drawTimeline" in PAGE and "WEAK SIGNAL" in PAGE
+
+
+def test_reopening_a_port_does_not_count_unread_packets_as_lost():
+    """Unplug/replug (or restarting the viewer) skips packets nobody read; the board did not lose them."""
+    hub = Hub()
+    for seq in range(1, 51):
+        hub.feed_line(csi_line(seq, [20] * 64), seq * 0.01, port="COM3")
+    hub.port_reset("COM3")  # port reopened; the board kept transmitting meanwhile
+    for seq in range(5000, 5050):
+        hub.feed_line(csi_line(seq, [20] * 64), 60 + seq * 0.0001, port="COM3")
+    assert snapshot(hub, 61.0)["lost"] == 0
+
+
+def test_a_real_gap_after_the_reset_is_still_counted():
+    hub = Hub()
+    hub.feed_line(csi_line(1, [20] * 64), 0.0, port="COM3")
+    hub.port_reset("COM3")
+    for seq in [10, 11, 15]:  # 12-14 genuinely missing
+        hub.feed_line(csi_line(seq, [20] * 64), 1.0, port="COM3")
+    assert snapshot(hub, 1.1)["lost"] == 3

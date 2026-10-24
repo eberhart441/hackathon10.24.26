@@ -13,8 +13,8 @@ The text format on the serial port (what the pipeline, model, dashboard and simu
 ## Status
 
 - Builds cleanly for the classic **ESP32** (the target) and, earlier, the **ESP32-C3**, with ESP-IDF v6.0. The prebuilt image is for the classic ESP32; build from source for a C3.
-- **Tested on hardware so far (one ESP32 as a receiver, no transmitter yet):** it flashes, boots, prints design-format `HB` lines that the Python parser accepts, keeps its settings across reboots, and handles `SET`, `GET`, `PING`, `REBOOT` and `FACTORY_RESET`, including rejecting bad values.
-- **Not yet tested:** a transmitter talking to a receiver, receiving CSI, the offset used to read the packet counter from the frame, and tags. The first two-board test is milestone M1.
+- **Tested on hardware so far:** a transmitter on a power bank and two receivers (classic ESP32 boards). Receiver 1 gets about 105 CSI lines/s with no loss and the heartbeat matches the design. Receiver 2, paired to the same transmitter but not the one it unicasts to, also hears it (about 96 lines/s, a few percent loss). Hand-over-antenna and walking tests change the signal. Settings survive reboots; `SET`, `GET`, `PING`, `REBOOT` and `FACTORY_RESET` work, including rejecting bad values.
+- **Not yet tested:** tags, a long run, battery-powered transmitter over time, two transmitter/receiver pairs at once, and the offset used to read the packet counter beyond "counters arrive in order with no gaps".
 - **Not built:** `EDGE` and `TRAINING` receiver modes, `RSST`/`FEAT` lines, `peers`, the annunciator, and UDP transport.
 
 ## Flash a board (no ESP-IDF needed)

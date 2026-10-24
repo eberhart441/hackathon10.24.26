@@ -250,7 +250,7 @@ def test_a_receiver_that_was_never_plugged_in_is_listed_as_not_connected():
 
 def _scripted_node(values):
     """A receiver whose activity follows a script; signal otherwise healthy."""
-    from roomsense_hub.viewer import NodeView
+    from beacon_hub.viewer import NodeView
     node = NodeView("RX1")
     node.window.extend([tuple([20] * 64)] * 100)
     node.means.extend([20.0] * 5)  # a healthy signal strength

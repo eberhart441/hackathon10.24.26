@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from roomsense_hub.protocol import CsiRecord, Heartbeat, format_record
+from beacon_hub.protocol import CsiRecord, Heartbeat, format_record
 
 PPS = 25  # per fake receiver; the room engine needs at least 20
 TRIM_ROWS = 100  # about 3 s of a recording at the relay rate

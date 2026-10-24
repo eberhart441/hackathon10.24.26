@@ -24,6 +24,9 @@ export interface RoomStateMsg {
   link_health: string;
   source?: 'edge' | 'hub';
   model_ver?: number | null;
+  // Extra ML classification of the room's receivers (hub/ml_classifier.py). Shown under the
+  // normal text only; it never changes the room state.
+  ml?: { label: string; motion_pct: number } | null;
 }
 
 export interface RoomStatesMessage {

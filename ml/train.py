@@ -38,6 +38,7 @@ from ml.features import (
     extract_windows,
     fit_scaler,
     load_session_csv,
+    median_filter_amplitudes,
 )
 
 
@@ -93,8 +94,14 @@ def load_sessions(rows: pd.DataFrame, data_dir: Path, tag: str = ""):
             print(f"  WARNING: {csv_file} not found, skipping {session_id}.")
             continue
 
-        df   = load_session_csv(csv_file)
-        wins = extract_windows(df)
+        # A session recorded through a relay gateway holds several receivers. Window each one on
+        # its own (as the live hub does); mixed together, the windows would alternate between
+        # receivers packet by packet and the model would learn the mix, not the motion.
+        df   = load_session_csv(csv_file, smooth=False)
+        per_node = [extract_windows(median_filter_amplitudes(g.reset_index(drop=True)))
+                    for _, g in df.groupby("node_id")] if "node_id" in df.columns else                    [extract_windows(median_filter_amplitudes(df))]
+        per_node = [w for w in per_node if len(w)]
+        wins = np.concatenate(per_node) if per_node else np.empty((0, WINDOW_PACKETS, N_SUB), dtype=np.float32)
         if len(wins) == 0:
             print(f"  WARNING: {session_id} produced 0 windows (too short?), skipping.")
             continue

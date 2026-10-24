@@ -29,6 +29,7 @@ export function RoomLabel({ room, onTap, compact }: Props) {
             {!compact ? <span class="rl-conf">{o.confText}</span> : null}
           </div>
           {!compact && o.detailText ? <div class="rl-detail">{o.detailText}</div> : null}
+          {!compact && o.mlText ? <div class="rl-detail rl-ml">{o.mlText}</div> : null}
           {!compact && o.subLabel ? <div class="rl-detail">{o.subLabel}</div> : null}
           {!compact && o.annotation ? <div class="rl-note">{o.annotation}</div> : null}
           <div class="rl-chips">

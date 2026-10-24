@@ -137,6 +137,7 @@ function RoomRow({ room, history, nowS }: { room: RoomDescriptor; history: RoomH
         {since !== null ? <span class="p-since">for {ageText(nowS - since)}</span> : null}
       </div>
       {o.detailText ? <div class="p-detail">{o.detailText}</div> : null}
+      {o.mlText ? <div class="p-detail p-ml">{o.mlText}</div> : null}
       {o.subLabel ? <div class="p-detail">{o.subLabel}</div> : null}
       {o.annotation ? <div class="p-detail note">{o.annotation}</div> : null}
       <HistoryStrip history={history} nowS={nowS} />

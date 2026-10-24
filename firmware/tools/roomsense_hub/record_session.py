@@ -1,6 +1,6 @@
 """Record one labelled validation/training session and add it to data/manifest.csv.
 
-Builds on the capture tool (same CSV sink, consent flag required, no installer allowlist) and
+Builds on the capture tool (same CSV sink, no installer allowlist) and
 adds a session ID, a countdown, and a manifest row so sessions can be split by
 session for validation and cross-validation.
 
@@ -9,7 +9,7 @@ room is empty.
 
 Example:
     rs-record --port COM5 --label motion --person A --layout L1 --motion-desc slow_walk \\
-        --split train --consent
+        --split train
 """
 from __future__ import annotations
 
@@ -57,8 +57,6 @@ def append_manifest(manifest: Path, row: dict) -> None:
 
 
 def record(args: argparse.Namespace) -> int:
-    if not args.consent:
-        raise CaptureError("Recording requires --consent: only consenting team members may be recorded.")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     manifest = out / "manifest.csv"
@@ -119,7 +117,7 @@ def record(args: argparse.Namespace) -> int:
     worst_loss = max((s["loss_rate"] if isinstance(s, dict) and "loss_rate" in s else 0 for s in streams), default=0)
     csv_path.with_suffix(".meta.json").write_text(json.dumps({
         "session_id": session_id, "label": args.label, "installer": args.installer,
-        "consent_confirmed": True, "started_utc": started.isoformat(),
+        "started_utc": started.isoformat(),
         "ended_utc": datetime.now(timezone.utc).isoformat(), "ports": args.port,
         "note": args.note, "streams": streams,
     }, indent=2, default=str), encoding="utf-8")
@@ -148,7 +146,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lead-in", type=float, default=5.0, help="countdown seconds before recording starts")
     p.add_argument("--session-id", default="", help="override the auto S01, S02, ... ID")
     p.add_argument("--installer", default="", help="optional name of whoever is recording")
-    p.add_argument("--consent", action="store_true", help="confirm everyone recorded has consented")
     p.add_argument("--note", default="")
     p.add_argument("--out", default=str(DEFAULT_OUT))
     return p

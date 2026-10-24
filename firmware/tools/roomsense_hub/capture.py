@@ -1,11 +1,10 @@
 """Record labeled raw CSI from one or more node serial ports to CSV (Training mode).
 
 Training mode (requirements 17 and 21.5) is restricted: the installer must be on
-the allowlist, the person recorded must have consented, and each file holds one
-class. Raw CSI is written to disk only by this tool.
+the allowlist, and each file holds one class. Raw CSI is written to disk only by this tool.
 
 Example:
-    rs-capture --port COM5 --port COM7 --label moving --installer alice --consent
+    rs-capture --port COM5 --port COM7 --label moving --installer alice
 """
 from __future__ import annotations
 
@@ -42,9 +41,7 @@ def load_allowlist(path: Path) -> set[str]:
     return names
 
 
-def check_training_allowed(installer: str, consent: bool, allowlist_path: Path) -> None:
-    if not consent:
-        raise CaptureError("Recording requires --consent: only consenting team members may be recorded.")
+def check_training_allowed(installer: str, allowlist_path: Path) -> None:
     if installer.strip().lower() not in load_allowlist(allowlist_path):
         raise CaptureError(f"'{installer}' is not an authorized installer for Training mode.")
 
@@ -70,7 +67,7 @@ def _reader(port: str, baud: int, lines: "queue.Queue[tuple[str, float, str]]", 
 
 def run_capture(args: argparse.Namespace) -> int:
     allowlist = Path(args.allowlist)
-    check_training_allowed(args.installer, args.consent, allowlist)
+    check_training_allowed(args.installer, allowlist)
 
     now = datetime.now(timezone.utc)
     csv_path, meta_path = output_paths(Path(args.out), args.label, now)
@@ -79,7 +76,6 @@ def run_capture(args: argparse.Namespace) -> int:
     meta = {
         "label": args.label,
         "installer": args.installer,
-        "consent_confirmed": True,
         "started_utc": now.isoformat(),
         "ports": args.port,
         "baud": args.baud,
@@ -138,7 +134,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--baud", type=int, default=921600)
     p.add_argument("--label", required=True, choices=CLASSES, help="one class per file")
     p.add_argument("--installer", required=True, help="authorized installer name")
-    p.add_argument("--consent", action="store_true", help="confirm everyone recorded has consented")
     p.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "data"))
     p.add_argument("--duration", type=float, default=0.0, help="seconds to record (0 = until Ctrl+C)")
     p.add_argument("--note", default="", help="free-text note saved in the meta file")

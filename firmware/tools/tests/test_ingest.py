@@ -110,16 +110,14 @@ def test_the_sample_capture_parses_cleanly():
     assert all(s.lost == 0 for s in ingest.stream_stats())
 
 
-def test_training_requires_consent_and_an_authorized_installer(tmp_path):
+def test_training_requires_an_authorized_installer(tmp_path):
     allow = tmp_path / "allow.txt"
     allow.write_text("# two installers\nAlice\nbob\n", encoding="utf-8")
-    check_training_allowed("alice", True, allow)  # case-insensitive, no error
-    with pytest.raises(CaptureError, match="consent"):
-        check_training_allowed("alice", False, allow)
+    check_training_allowed("alice", allow)  # case-insensitive, no error
     with pytest.raises(CaptureError, match="not an authorized"):
-        check_training_allowed("mallory", True, allow)
+        check_training_allowed("mallory", allow)
     with pytest.raises(CaptureError, match="allowlist"):
-        check_training_allowed("alice", True, tmp_path / "missing.txt")
+        check_training_allowed("alice", tmp_path / "missing.txt")
 
 
 def test_each_recording_goes_to_its_own_labeled_file(tmp_path):

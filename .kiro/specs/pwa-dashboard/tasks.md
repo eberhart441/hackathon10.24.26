@@ -264,7 +264,7 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - **Validates: Requirements 17.3, 17.4**
     - Done when: `npm --prefix dashboard run test -- storage.prop` passes
 
-- [-] 9. Checkpoint - Phone pairing and PWA install
+- [x] 9. Checkpoint - Phone pairing and PWA install
   - Ensure all tests pass, ask the user if questions arise.
   - Done when: all test commands from task 7 pass, `python tools/check_pins.py` exits 0, and with the mkcert cert in `hub/certs/`, `python tools/mock_hub.py` logs listeners on `127.0.0.1:8443` and `192.168.137.1:8443` with TLS
 
@@ -292,15 +292,15 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - Done when: `npm --prefix dashboard run build` exits 0 and `npm --prefix dashboard run test -- privacy` still reports gzipped JS ≤ 350 KB
 
 - [ ] 11. Fire-mode polish, crew markers, and floor-2 rooms (P4)
-  - [ ] 11.1 Implement the fire-mode entry sequence
+  - [-] 11.1 Implement the fire-mode entry sequence
     - Create `dashboard/src/ui/FireEntry.tsx` (red header within one frame, 1 s red flash unless reduced motion, frame Flagged_Rooms within 600 ms via the active renderer, open Priority_List to 3 rows); update `dashboard/src/app.tsx` to mount it on the IDLE → ALARM_ACTIVE transition
     - _Requirements: 13.1, 13.2, 13.3_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [ ] 11.2 Implement best-effort Screen Wake Lock
+  - [-] 11.2 Implement best-effort Screen Wake Lock
     - Create `dashboard/src/ui/wakelock.ts`: request on fire entry, re-request on visible, swallow unsupported or rejected requests
     - _Requirements: 13.4_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [ ] 11.3 Implement the snapshot inset (cut 3: toggle variant)
+  - [-] 11.3 Implement the snapshot inset (cut 3: toggle variant)
     - Create `dashboard/src/ui/SnapshotInset.tsx`: 2D mini-plan from `scene.snapshot` labeled "AT ALARM", tap to swap with the live view; a `snapshotMode: "inset" | "toggle"` constant selects the cut-3 "At alarm" toggle variant
     - _Requirements: 13.5, 13.6_
     - Done when: `npm --prefix dashboard run build` exits 0

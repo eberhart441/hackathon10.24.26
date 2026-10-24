@@ -6,7 +6,7 @@ import random
 import re
 
 import pytest
-from roomsense_hub import CsiRecord, Heartbeat, TagSummary, format_record
+from beacon_hub import CsiRecord, Heartbeat, TagSummary, format_record
 
 from hub.live_source import LiveSource
 

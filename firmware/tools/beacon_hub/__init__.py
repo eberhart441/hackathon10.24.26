@@ -1,4 +1,4 @@
-"""Hub-side helpers for the RoomSense node serial protocol."""
+"""Hub-side helpers for the Beacon node serial protocol."""
 from .protocol import (
     AMPLITUDE_COUNT,
     CsiRecord,

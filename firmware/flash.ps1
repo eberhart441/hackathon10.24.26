@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Flash a prebuilt RoomSense node image. No ESP-IDF needed.
+  Flash a prebuilt Beacon node image. No ESP-IDF needed.
 
 .DESCRIPTION
   Uses the esptool that the Arduino IDE already installed for the ESP32 boards
@@ -33,7 +33,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $Image) {
-    $Image = Join-Path $PSScriptRoot "prebuilt\roomsense-$Chip.bin"
+    $Image = Join-Path $PSScriptRoot "prebuilt\beacon-$Chip.bin"
 }
 if (-not (Test-Path $Image)) {
     throw "Image not found: $Image"

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import dxf_to_floorplan as d2f  # noqa: E402
 import walls_to_floorplan as w2f  # noqa: E402
-from roomsense_hub.dxf_walls import read_dxf_text  # noqa: E402
+from beacon_hub.dxf_walls import read_dxf_text  # noqa: E402
 
 from hub.live_source import FloorplanLinks  # noqa: E402
 

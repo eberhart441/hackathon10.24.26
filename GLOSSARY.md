@@ -30,11 +30,11 @@ Shared vocabulary for this project. Definitions only; implementation details liv
 
 **Gateway** (retired for the demo): an earlier idea of a separate node that forwarded data to a Raspberry Pi. In the demo the slaves connect straight to the laptop.
 
-## RoomSense spec names
+## Beacon spec names
 
-The teammates' requirements spec (`.kiro/specs/roomsense-occupancy-tool/requirements.md`) uses different names for the same things. Both are fine; this is the mapping.
+The teammates' requirements spec (`.kiro/specs/beacon-occupancy-tool/requirements.md`) uses different names for the same things. Both are fine; this is the mapping.
 
-| This glossary | RoomSense spec |
+| This glossary | Beacon spec |
 |---------------|----------------|
 | Master | TX_Node |
 | Slave | RX_Node |

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from roomsense_hub import CsiRecord, Heartbeat, format_record
-from roomsense_hub.capture import CaptureError, check_training_allowed, output_paths
-from roomsense_hub.ingest import CsvSink, Ingest, csv_columns
+from beacon_hub import CsiRecord, Heartbeat, format_record
+from beacon_hub.capture import CaptureError, check_training_allowed, output_paths
+from beacon_hub.ingest import CsvSink, Ingest, csv_columns
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_capture.log"
 TX = "4c:c3:82:20:c5:1c"

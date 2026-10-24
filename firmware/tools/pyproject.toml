@@ -3,20 +3,20 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "roomsense-hub"
+name = "beacon-hub"
 version = "0.1.0"
-description = "Hub-side helpers for the RoomSense node serial protocol: parser, ingest, and training-data capture"
+description = "Hub-side helpers for the Beacon node serial protocol: parser, ingest, and training-data capture"
 requires-python = ">=3.10"
 dependencies = ["pyserial==3.5"]
 
 [project.scripts]
-rs-capture = "roomsense_hub.capture:main"
-rs-record = "roomsense_hub.record_session:main"
-rs-view = "roomsense_hub.viewer:main"
-rs-setup = "roomsense_hub.setup_boards:main"
+rs-capture = "beacon_hub.capture:main"
+rs-record = "beacon_hub.record_session:main"
+rs-view = "beacon_hub.viewer:main"
+rs-setup = "beacon_hub.setup_boards:main"
 
 [tool.setuptools]
-packages = ["roomsense_hub"]
+packages = ["beacon_hub"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

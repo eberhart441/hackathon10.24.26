@@ -2,7 +2,7 @@
 
 ## Introduction
 
-RoomSense is a low-cost, offline-capable network of ESP32 WiFi-sensing nodes that estimates which rooms in a small building are likely occupied and presents first responders a prioritized, honest-confidence map when an alarm is triggered. The core question is "Is anyone likely still in this room, and how sure are we?" The system does not answer "what does the room look like" or "who is in it."
+Beacon is a low-cost, offline-capable network of ESP32 WiFi-sensing nodes that estimates which rooms in a small building are likely occupied and presents first responders a prioritized, honest-confidence map when an alarm is triggered. The core question is "Is anyone likely still in this room, and how sure are we?" The system does not answer "what does the room look like" or "who is in it."
 
 This requirements document scopes the 8-hour hackathon build. Requirements are written to satisfy the hackathon Must and Should priority tiers (Section 15 of the source spec and the per-section hackathon scope callouts), with production/long-term capabilities explicitly marked out of scope or deferred.
 
@@ -28,7 +28,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 ## Glossary
 
-- **RoomSense_System**: The complete offline network of ESP32 sensing nodes, the hub pipeline, the detection model, the state engine, and the responder dashboard, considered as one system.
+- **Beacon_System**: The complete offline network of ESP32 sensing nodes, the hub pipeline, the detection model, the state engine, and the responder dashboard, considered as one system.
 - **TX_Node**: An ESP32 node that transmits packets at a fixed rate on a fixed channel to a paired receiver.
 - **RX_Node**: An ESP32 node that captures channel state information from its paired transmitter, timestamps records, and forwards them to the hub.
 - **Node**: Any ESP32 device acting as a TX_Node or RX_Node.
@@ -91,9 +91,9 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 1. WHEN the Detection_Model receives a feature window for a room link, THE Detection_Model SHALL output class probabilities over exactly the three classes empty, moving, and still_present, where each probability is bounded between 0.0 and 1.0 inclusive and the three probabilities sum to 1.0 within a tolerance of 0.01.
 2. THE Detection_Model SHALL output a smoothed occupied probability for each room computed as the sum of the moving probability and the still_present probability averaged over a sliding window of the most recent 5 feature windows, bounded between 0.0 and 1.0 inclusive.
 3. WHEN classifying a feature window, THE Detection_Model SHALL complete inference within 50 milliseconds measured from feature-window receipt to probability output, per window per link.
-4. THE RoomSense_System SHALL classify each room independently, such that a room's class probabilities are unchanged by other rooms' feature windows or classification results.
+4. THE Beacon_System SHALL classify each room independently, such that a room's class probabilities are unchanged by other rooms' feature windows or classification results.
 5. WHERE a room has not completed calibration, THE Dashboard SHALL mark that room as Unknown/offline and display an uncalibrated warning.
-6. IF inference for a feature window exceeds the 50-millisecond limit, THEN THE RoomSense_System SHALL mark that room's result unavailable for that window and retain the last successful result.
+6. IF inference for a feature window exceeds the 50-millisecond limit, THEN THE Beacon_System SHALL mark that room's result unavailable for that window and retain the last successful result.
 
 ### Requirement 2: Firmware CSI Capture and Transport
 
@@ -105,7 +105,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 2. WHEN an RX_Node captures a CSI packet, THE RX_Node SHALL filter by the paired TX_Node MAC address and discard packets from any other source.
 3. WHEN an RX_Node forwards a CSI record, THE RX_Node SHALL include node identifier, TX MAC, sequence number, local timestamp, RSSI, channel, and per-subcarrier CSI amplitude in that record.
 4. WHILE in HUB_Mode or TRAINING_Mode, THE RX_Node SHALL forward CSI records to the Hub over USB serial (UART) at a baud rate of at least 921600.
-5. IF the configured packet rate and CSI record size exceed the serial link capacity, THEN THE RoomSense_System SHALL reduce load by lowering the packet rate to 50 packets per second or by forwarding only the L-LTF subcarriers, so that no CSI records are silently truncated.
+5. IF the configured packet rate and CSI record size exceed the serial link capacity, THEN THE Beacon_System SHALL reduce load by lowering the packet rate to 50 packets per second or by forwarding only the L-LTF subcarriers, so that no CSI records are silently truncated.
 6. WHILE in EDGE_Mode, THE RX_Node SHALL NOT forward raw CSI.
 
 ### Requirement 3: Node Configuration, Heartbeats, and Reboot Resilience
@@ -153,12 +153,12 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 #### Acceptance Criteria
 
 1. THE Detection_Model SHALL provide a small neural network as the primary classifier and a gradient-boosted-tree model on hand-crafted features as a baseline classifier.
-2. WHEN evaluating the Detection_Model, THE RoomSense_System SHALL hold out entire recording sessions from the training set.
-3. WHEN reporting evaluation results, THE RoomSense_System SHALL report a confusion matrix, per-class recall, and the false-"empty" rate.
-4. WHEN selecting the primary evaluation metric, THE RoomSense_System SHALL prioritize recall on the moving and still_present classes.
+2. WHEN evaluating the Detection_Model, THE Beacon_System SHALL hold out entire recording sessions from the training set.
+3. WHEN reporting evaluation results, THE Beacon_System SHALL report a confusion matrix, per-class recall, and the false-"empty" rate.
+4. WHEN selecting the primary evaluation metric, THE Beacon_System SHALL prioritize recall on the moving and still_present classes.
 5. THE Detection_Model SHALL bias its decision threshold toward the Possible presence outcome rather than the No detection outcome.
-6. WHEN training the neural network, THE RoomSense_System SHALL apply subcarrier dropout or subcarrier shuffle augmentation to reduce room-specific fingerprint learning.
-7. WHEN the gradient-boosted-tree baseline outperforms the neural network on held-out-room evaluation, THE RoomSense_System SHALL ship the baseline as the live classifier.
+6. WHEN training the neural network, THE Beacon_System SHALL apply subcarrier dropout or subcarrier shuffle augmentation to reduce room-specific fingerprint learning.
+7. WHEN the gradient-boosted-tree baseline outperforms the neural network on held-out-room evaluation, THE Beacon_System SHALL ship the baseline as the live classifier.
 
 ### Requirement 7: Calibration Mode
 
@@ -168,7 +168,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 1. WHEN an installer starts calibration for a room, THE Calibration_Mode SHALL record a 30-second empty baseline followed by a walk-through and a 30-second still recording.
 2. WHEN calibration recording completes for a room, THE Calibration_Mode SHALL fit baseline normalization for that room.
-3. WHEN calibration completes for a room, THE RoomSense_System SHALL mark that room as calibrated with a timestamp.
+3. WHEN calibration completes for a room, THE Beacon_System SHALL mark that room as calibrated with a timestamp.
 4. WHILE a room is uncalibrated, THE Dashboard SHALL display a warning for that room.
 
 ### Requirement 8: Room State Model and Hysteresis
@@ -199,11 +199,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. THE RoomSense_System SHALL rank rooms by Search_Priority in the strict order Motion detected first, Possible presence second, Unknown/offline third, and No detection fourth.
-2. THE RoomSense_System SHALL rank every Unknown/offline room above every No detection room in all displayed orderings.
-3. WHEN two rooms share the same Room_State, THE RoomSense_System SHALL break the tie deterministically by ranking the room with the more recent Last_Seen first.
-4. WHEN a node meets the offline condition, defined as no heartbeat received within a 10-second window, THE RoomSense_System SHALL set its room to Unknown/offline and rank that room above No detection rooms within 10 seconds.
-5. THE RoomSense_System SHALL rank every room with a Searched_Mark after every room without a Searched_Mark, preserving Search_Priority order within each group.
+1. THE Beacon_System SHALL rank rooms by Search_Priority in the strict order Motion detected first, Possible presence second, Unknown/offline third, and No detection fourth.
+2. THE Beacon_System SHALL rank every Unknown/offline room above every No detection room in all displayed orderings.
+3. WHEN two rooms share the same Room_State, THE Beacon_System SHALL break the tie deterministically by ranking the room with the more recent Last_Seen first.
+4. WHEN a node meets the offline condition, defined as no heartbeat received within a 10-second window, THE Beacon_System SHALL set its room to Unknown/offline and rank that room above No detection rooms within 10 seconds.
+5. THE Beacon_System SHALL rank every room with a Searched_Mark after every room without a Searched_Mark, preserving Search_Priority order within each group.
 
 ### Requirement 10: Local Offline Dashboard
 
@@ -263,7 +263,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 1. WHEN Fire_Mode is triggered, THE Dashboard SHALL switch to the responder view, freeze an alarm-time snapshot, and display the snapshot alongside the live view.
 2. WHILE in Fire_Mode, THE Dashboard SHALL display rooms ranked by Search_Priority.
 3. WHEN a node fails during Fire_Mode, THE Dashboard SHALL flip its room to Unknown/offline and display the last-known state with its age.
-4. THE RoomSense_System SHALL NOT perform automatic dispatch or notification in the hackathon build.
+4. THE Beacon_System SHALL NOT perform automatic dispatch or notification in the hackathon build.
 
 ### Requirement 15: Recording Policy, States, and Rolling Buffer
 
@@ -271,18 +271,18 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHILE in IDLE_State, THE RoomSense_System SHALL persist no Occupancy_Data (room states, Confidence, tag positions, and CSI) and SHALL display the Recording_Indicator as "Not recording".
-2. WHILE in IDLE_State, THE RoomSense_System SHALL maintain the mode B Rolling_Buffer in RAM only holding the most recent 120 seconds and SHALL NOT display, log, or transmit its contents.
-3. WHEN an alarm is triggered, THE RoomSense_System SHALL enter ALARM_ACTIVE_State within 2 seconds, activate Fire_Mode, and display the Recording_Indicator as "Recording (alarm)".
-4. WHEN an alarm is triggered, THE RoomSense_System SHALL freeze the Rolling_Buffer into the Incident_Record within 2 seconds.
-5. WHILE in ALARM_ACTIVE_State, THE RoomSense_System SHALL persist only per-room state, Confidence, timestamps, node health events, and searched marks in the Incident_Record, and SHALL persist no other data.
+1. WHILE in IDLE_State, THE Beacon_System SHALL persist no Occupancy_Data (room states, Confidence, tag positions, and CSI) and SHALL display the Recording_Indicator as "Not recording".
+2. WHILE in IDLE_State, THE Beacon_System SHALL maintain the mode B Rolling_Buffer in RAM only holding the most recent 120 seconds and SHALL NOT display, log, or transmit its contents.
+3. WHEN an alarm is triggered, THE Beacon_System SHALL enter ALARM_ACTIVE_State within 2 seconds, activate Fire_Mode, and display the Recording_Indicator as "Recording (alarm)".
+4. WHEN an alarm is triggered, THE Beacon_System SHALL freeze the Rolling_Buffer into the Incident_Record within 2 seconds.
+5. WHILE in ALARM_ACTIVE_State, THE Beacon_System SHALL persist only per-room state, Confidence, timestamps, node health events, and searched marks in the Incident_Record, and SHALL persist no other data.
 6. THE Hub SHALL NOT persist raw CSI, identity, imagery, or audio, and raw CSI persistence SHALL exist only in the Training_Tool.
 7. THE Dashboard SHALL keep the Recording_Indicator visible at all times.
-8. WHILE in IDLE_State, THE RoomSense_System SHALL report a stored-samples counter value of exactly 0.
-9. IF Occupancy_Data is written while in IDLE_State, THEN THE RoomSense_System SHALL raise a policy-violation fault, reject the write so that persisted storage is unchanged, and display a visible fault indication.
-10. WHILE in IDLE_State, THE RoomSense_System SHALL allow writes of configuration, calibration baselines, and the Health_Log.
-11. WHEN a responder taps "End incident" while in ALARM_ACTIVE_State, THE RoomSense_System SHALL return to IDLE_State and purge the Incident_Record according to the retention policy.
-12. THE RoomSense_System SHALL support CALIBRATION_State, entered and exited from normal mode by an installer, in which THE RoomSense_System SHALL persist calibration baselines and tag RSSI offsets and SHALL NOT persist Occupancy_Data.
+8. WHILE in IDLE_State, THE Beacon_System SHALL report a stored-samples counter value of exactly 0.
+9. IF Occupancy_Data is written while in IDLE_State, THEN THE Beacon_System SHALL raise a policy-violation fault, reject the write so that persisted storage is unchanged, and display a visible fault indication.
+10. WHILE in IDLE_State, THE Beacon_System SHALL allow writes of configuration, calibration baselines, and the Health_Log.
+11. WHEN a responder taps "End incident" while in ALARM_ACTIVE_State, THE Beacon_System SHALL return to IDLE_State and purge the Incident_Record according to the retention policy.
+12. THE Beacon_System SHALL support CALIBRATION_State, entered and exited from normal mode by an installer, in which THE Beacon_System SHALL persist calibration baselines and tag RSSI offsets and SHALL NOT persist Occupancy_Data.
 
 ### Requirement 16: Demo Alarm Trigger
 
@@ -291,10 +291,10 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 #### Acceptance Criteria
 
 1. THE Dashboard SHALL present an alarm-trigger button on a landing page.
-2. WHILE in IDLE_State, WHEN the alarm-trigger button is activated, THE RoomSense_System SHALL transition to ALARM_ACTIVE_State within 2 seconds.
+2. WHILE in IDLE_State, WHEN the alarm-trigger button is activated, THE Beacon_System SHALL transition to ALARM_ACTIVE_State within 2 seconds.
 3. WHEN the alarm-trigger button is activated, THE Dashboard SHALL display a label identifying the trigger as simulated.
-4. IF the alarm-trigger button is activated while already in ALARM_ACTIVE_State, THEN THE RoomSense_System SHALL keep ALARM_ACTIVE_State and take no additional transition.
-5. THE RoomSense_System SHALL treat physical, GPIO, and dry-contact alarm triggers as out of scope for the hackathon demo.
+4. IF the alarm-trigger button is activated while already in ALARM_ACTIVE_State, THEN THE Beacon_System SHALL keep ALARM_ACTIVE_State and take no additional transition.
+5. THE Beacon_System SHALL treat physical, GPIO, and dry-contact alarm triggers as out of scope for the hackathon demo.
 
 ### Requirement 17: Training Data Recording Mode
 
@@ -315,13 +315,13 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHEN an installer enters Test_Mode, THE RoomSense_System SHALL require an installer key switch or an authenticated PIN.
+1. WHEN an installer enters Test_Mode, THE Beacon_System SHALL require an installer key switch or an authenticated PIN.
 2. WHILE in Test_Mode, THE Dashboard SHALL display an amber TEST MODE banner and show the Recording_Indicator as "Recording (test)".
-3. WHILE in Test_Mode, THE RoomSense_System SHALL auto-exit after 15 minutes and SHALL issue a warning 1 minute before auto-exit.
-4. IF a real alarm is triggered while in Test_Mode, THEN THE RoomSense_System SHALL override Test_Mode and enter ALARM_ACTIVE_State.
-5. THE RoomSense_System SHALL NOT make Test_Mode reachable from responder screens.
-6. WHEN a node-down test is performed in Test_Mode, THE RoomSense_System SHALL set the affected room to Unknown/offline and raise a fault within 10 seconds.
-7. WHEN Test_Mode ends, THE RoomSense_System SHALL produce a printable inspection report containing date and time, inspector, node list, health values, trigger result, and calibration dates, and SHALL exclude occupancy data from that report.
+3. WHILE in Test_Mode, THE Beacon_System SHALL auto-exit after 15 minutes and SHALL issue a warning 1 minute before auto-exit.
+4. IF a real alarm is triggered while in Test_Mode, THEN THE Beacon_System SHALL override Test_Mode and enter ALARM_ACTIVE_State.
+5. THE Beacon_System SHALL NOT make Test_Mode reachable from responder screens.
+6. WHEN a node-down test is performed in Test_Mode, THE Beacon_System SHALL set the affected room to Unknown/offline and raise a fault within 10 seconds.
+7. WHEN Test_Mode ends, THE Beacon_System SHALL produce a printable inspection report containing date and time, inspector, node list, health values, trigger result, and calibration dates, and SHALL exclude occupancy data from that report.
 
 ### Requirement 19: Self-Diagnostics and Health Reporting
 
@@ -329,16 +329,16 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. THE RoomSense_System SHALL report component health continuously even while not recording.
-2. THE RoomSense_System SHALL keep health data separate from occupancy data, and Heartbeats SHALL contain no CSI or occupancy data.
-3. WHEN a node heartbeat is missing for 10 seconds, THE RoomSense_System SHALL mark that node offline and display the fault in plain language within 10 seconds.
+1. THE Beacon_System SHALL report component health continuously even while not recording.
+2. THE Beacon_System SHALL keep health data separate from occupancy data, and Heartbeats SHALL contain no CSI or occupancy data.
+3. WHEN a node heartbeat is missing for 10 seconds, THE Beacon_System SHALL mark that node offline and display the fault in plain language within 10 seconds.
 4. THE Dashboard SHALL display a Health_Chip in the header summarizing sensor health and SHALL open a fault list showing each cause and a suggested action when selected.
 5. WHEN a node fault is active, THE Dashboard SHALL render the affected room as Unknown/offline with a fault indicator and rank that room above No detection rooms.
-6. WHEN a previously offline node returns, THE RoomSense_System SHALL require 10 seconds of healthy heartbeats before removing the Unknown/offline state.
-7. WHERE transmitter-dead versus receiver-dead distinction is supported, IF a receiver is alive but the measured packet rate is below 20 percent for 5 seconds, THEN THE RoomSense_System SHALL report a transmitter-dead fault, and THE RoomSense_System SHALL use this packet-rate check as the sole TX_Node health signal.
+6. WHEN a previously offline node returns, THE Beacon_System SHALL require 10 seconds of healthy heartbeats before removing the Unknown/offline state.
+7. WHERE transmitter-dead versus receiver-dead distinction is supported, IF a receiver is alive but the measured packet rate is below 20 percent for 5 seconds, THEN THE Beacon_System SHALL report a transmitter-dead fault, and THE Beacon_System SHALL use this packet-rate check as the sole TX_Node health signal.
 8. WHERE hub-lost detection is supported, IF the hub becomes unreachable for 5 seconds, THEN THE Dashboard SHALL display a full-width hub-lost banner.
-9. WHEN an RX Heartbeat is missing for 3 seconds, THE RoomSense_System SHALL mark that RX_Node degraded.
-10. THE RoomSense_System SHALL write the Health_Log across incidents, including while in IDLE_State, and THE Health_Log SHALL contain no Occupancy_Data.
+9. WHEN an RX Heartbeat is missing for 3 seconds, THE Beacon_System SHALL mark that RX_Node degraded.
+10. THE Beacon_System SHALL write the Health_Log across incidents, including while in IDLE_State, and THE Health_Log SHALL contain no Occupancy_Data.
 
 ### Requirement 20: Reliability and Failure Handling
 
@@ -346,11 +346,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHEN a node loses power and its heartbeat is missing beyond the offline threshold, THE RoomSense_System SHALL set its room to Unknown/offline.
-2. IF the packet rate for a link collapses, THEN THE RoomSense_System SHALL set its room to Unknown/offline or reduce its Confidence.
-3. WHEN the Hub restarts, THE RoomSense_System SHALL resume the pipeline from live data, reset the timeline, and set all rooms to Unknown/offline until fresh windows are available.
-4. IF a router or channel change is detected, THEN THE RoomSense_System SHALL flag the change, apply a grace period, and SHALL NOT interpret the change as motion.
-5. WHEN an environmental change is detected for a room, THE RoomSense_System SHALL raise a recalibration flag for that room.
+1. WHEN a node loses power and its heartbeat is missing beyond the offline threshold, THE Beacon_System SHALL set its room to Unknown/offline.
+2. IF the packet rate for a link collapses, THEN THE Beacon_System SHALL set its room to Unknown/offline or reduce its Confidence.
+3. WHEN the Hub restarts, THE Beacon_System SHALL resume the pipeline from live data, reset the timeline, and set all rooms to Unknown/offline until fresh windows are available.
+4. IF a router or channel change is detected, THEN THE Beacon_System SHALL flag the change, apply a grace period, and SHALL NOT interpret the change as motion.
+5. WHEN an environmental change is detected for a room, THE Beacon_System SHALL raise a recalibration flag for that room.
 
 ### Requirement 21: Privacy, Ethics, and Safety
 
@@ -358,11 +358,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. THE RoomSense_System SHALL output per-room occupancy states only and SHALL NOT capture imagery, audio, or identity.
-2. THE RoomSense_System SHALL process all data locally and SHALL NOT use cloud services, accounts, or remote access.
+1. THE Beacon_System SHALL output per-room occupancy states only and SHALL NOT capture imagery, audio, or identity.
+2. THE Beacon_System SHALL process all data locally and SHALL NOT use cloud services, accounts, or remote access.
 3. THE Hub SHALL retain raw CSI only within RAM rolling buffers, with disk persistence of raw CSI confined to the Training_Tool, and SHALL retain the state timeline for the current session only.
 4. THE Dashboard SHALL state through its disclaimer that the system is decision support and never replaces a full search.
-5. WHEN raw training recordings are collected, THE RoomSense_System SHALL collect them only from consenting team members.
+5. WHEN raw training recordings are collected, THE Beacon_System SHALL collect them only from consenting team members.
 
 ### Requirement 22: Test and Validation Plan
 
@@ -370,12 +370,12 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHEN validating detection, THE RoomSense_System SHALL evaluate empty versus occupied classification using session-held-out data and report actual moving and still_present recall.
-2. WHEN validating the moving-to-still behavior, THE RoomSense_System SHALL verify that a moving-then-still sequence results in a Possible presence state.
-3. WHEN validating person generalization, THE RoomSense_System SHALL train on two people and test on a third person.
-4. WHEN validating node failure, THE RoomSense_System SHALL verify that a failed node results in an Unknown/offline room within the offline threshold.
-5. WHEN reporting any validation result, THE RoomSense_System SHALL report the confusion matrix, the false-"empty" rate, and the test conditions.
-6. WHEN validating room generalization, THE RoomSense_System SHALL train on Room 1 data, evaluate on Room 2 data, and report the result.
+1. WHEN validating detection, THE Beacon_System SHALL evaluate empty versus occupied classification using session-held-out data and report actual moving and still_present recall.
+2. WHEN validating the moving-to-still behavior, THE Beacon_System SHALL verify that a moving-then-still sequence results in a Possible presence state.
+3. WHEN validating person generalization, THE Beacon_System SHALL train on two people and test on a third person.
+4. WHEN validating node failure, THE Beacon_System SHALL verify that a failed node results in an Unknown/offline room within the offline threshold.
+5. WHEN reporting any validation result, THE Beacon_System SHALL report the confusion matrix, the false-"empty" rate, and the test conditions.
+6. WHEN validating room generalization, THE Beacon_System SHALL train on Room 1 data, evaluate on Room 2 data, and report the result.
 
 ### Requirement 23: Responder Tag Firmware (FW-8) [Should]
 
@@ -437,11 +437,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 #### Acceptance Criteria
 
 1. WHILE a tag is located in a room at medium or high Confidence, THE Dashboard SHALL label Motion in that room as "Motion . responder present".
-2. THE RoomSense_System SHALL NOT downgrade or hide a Motion detected state because a Responder_Tag is present.
+2. THE Beacon_System SHALL NOT downgrade or hide a Motion detected state because a Responder_Tag is present.
 3. WHEN a responder leaves a room that holds Possible presence, THE Dashboard SHALL annotate that room with "recent motion may be responder" without changing the Room_State or the Search_Priority.
 4. THE alarm-time snapshot SHALL remain unaffected by tag presence.
 5. IF a tag remains in a flagged room for at least 20 seconds, THEN THE Dashboard SHALL offer a "Mark searched?" suggestion in that room's detail sheet, for example "E1 was here 0:45 . Mark searched?".
-6. THE RoomSense_System SHALL NOT mark any room searched automatically, and marking a room searched SHALL require a responder tap.
+6. THE Beacon_System SHALL NOT mark any room searched automatically, and marking a room searched SHALL require a responder tap.
 
 ### Requirement 28: Tag Calibration and Per-Room Offsets [Could]
 
@@ -460,11 +460,11 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHILE in ALARM_ACTIVE_State, Test_Mode, or CALIBRATION_State, THE RoomSense_System SHALL process Tag_Summaries.
-2. WHILE in IDLE_State and not in CALIBRATION_State, THE RoomSense_System SHALL drop all Tag_Summaries.
-3. THE RoomSense_System SHALL locate only commissioned tag IDs.
-4. WHILE in ALARM_ACTIVE_State, THE RoomSense_System SHALL include tag positions in the Incident_Record under the existing retention rules, and THE RoomSense_System SHALL persist tag positions only in the Incident_Record.
-5. WHILE in CALIBRATION_State, THE RoomSense_System SHALL persist only per-room tag RSSI offsets and SHALL NOT persist tag positions.
+1. WHILE in ALARM_ACTIVE_State, Test_Mode, or CALIBRATION_State, THE Beacon_System SHALL process Tag_Summaries.
+2. WHILE in IDLE_State and not in CALIBRATION_State, THE Beacon_System SHALL drop all Tag_Summaries.
+3. THE Beacon_System SHALL locate only commissioned tag IDs.
+4. WHILE in ALARM_ACTIVE_State, THE Beacon_System SHALL include tag positions in the Incident_Record under the existing retention rules, and THE Beacon_System SHALL persist tag positions only in the Incident_Record.
+5. WHILE in CALIBRATION_State, THE Beacon_System SHALL persist only per-room tag RSSI offsets and SHALL NOT persist tag positions.
 
 ### Requirement 30: Tag Localization Failure Handling [Should]
 
@@ -474,7 +474,7 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 1. WHEN any RX_Node is offline AND the leading adjusted smoothed RSSI for a tag is below -75 dBm, THE Hub SHALL force that tag's Tag_Location Confidence to low and THE Dashboard SHALL display "Near Room X / Room Y" rather than a single room.
 2. WHEN a Responder_Tag loses power or crashes, THE Dashboard SHALL display a hollow Crew_Marker and THE Health_Chip SHALL raise a tag fault.
-3. THE RoomSense_System SHALL treat the tag localization thresholds, including the 6-decibel lead, the 2-second lead duration, the 3-second silence window, the 10-second lost-tag window, the decibel Confidence bands, the -95 dBm silent-room floor, and the -75 dBm weak-signal threshold, as calibration-tunable starting values.
+3. THE Beacon_System SHALL treat the tag localization thresholds, including the 6-decibel lead, the 2-second lead duration, the 3-second silence window, the 10-second lost-tag window, the decibel Confidence bands, the -95 dBm silent-room floor, and the -75 dBm weak-signal threshold, as calibration-tunable starting values.
 
 ### Requirement 31: Edge Feature Extraction on the RX [Should]
 
@@ -496,8 +496,8 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 #### Acceptance Criteria
 
 1. WHEN the Edge_Model receives Edge_Features for a window, THE Edge_Model SHALL output probabilities over exactly the three classes empty, moving, and still_present, where each probability is bounded between 0.0 and 1.0 inclusive and the three probabilities sum to 1.0 within a tolerance of 0.01.
-2. THE RoomSense_System SHALL ship as the Edge_Model whichever of the C-exported tree-ensemble model or the INT8 TensorFlow Lite Micro dense network performs better on session-held-out evaluation, weighting recall on the moving and still_present classes first.
-3. THE RoomSense_System SHALL run the Hub_Neural_Network only on the Hub and SHALL NOT deploy the Hub_Neural_Network to RX_Nodes.
+2. THE Beacon_System SHALL ship as the Edge_Model whichever of the C-exported tree-ensemble model or the INT8 TensorFlow Lite Micro dense network performs better on session-held-out evaluation, weighting recall on the moving and still_present classes first.
+3. THE Beacon_System SHALL run the Hub_Neural_Network only on the Hub and SHALL NOT deploy the Hub_Neural_Network to RX_Nodes.
 4. WHEN an RX_Node sends a Room_State_Packet, THE RX_Node SHALL include the loaded Edge_Model version in that Room_State_Packet.
 
 ### Requirement 33: Training/Device Parity [Should]
@@ -508,8 +508,8 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 1. WHILE in TRAINING_Mode, THE RX_Node SHALL stream raw CSI lines and FEAT_Lines together over serial.
 2. WHEN the RX_Node emits a FEAT_Line, THE RX_Node SHALL identify in that FEAT_Line the CSI frames the FEAT_Line was computed from by sequence range and frame count.
-3. THE RoomSense_System SHALL train the Edge_Model on device-computed Edge_Features, taken either from recorded FEAT_Lines or regenerated from recorded raw CSI by the same feature-extraction source code compiled for the laptop.
-4. WHEN an Edge_Model is flashed to an RX_Node for EDGE_Mode, THE RoomSense_System SHALL accept the Edge_Model only after the Parity_Check has passed on the same recording.
+3. THE Beacon_System SHALL train the Edge_Model on device-computed Edge_Features, taken either from recorded FEAT_Lines or regenerated from recorded raw CSI by the same feature-extraction source code compiled for the laptop.
+4. WHEN an Edge_Model is flashed to an RX_Node for EDGE_Mode, THE Beacon_System SHALL accept the Edge_Model only after the Parity_Check has passed on the same recording.
 5. THE Parity_Check SHALL pass only WHEN Edge_Features agree within a configured tolerance, the argmax class agrees on at least 99 percent of windows, and per-class probabilities differ by at most 0.02 (calibration-tunable starting values).
 6. IF the Parity_Check fails, THEN THE RX_Node SHALL remain in HUB_Mode.
 
@@ -561,10 +561,10 @@ Safety-critical behaviors emphasized across all requirements: the interface neve
 
 #### Acceptance Criteria
 
-1. WHILE all RX_Nodes are in EDGE_Mode, THE RoomSense_System SHALL continue detection, room state, and Annunciator display with the Hub disconnected or the Hub process stopped, including during Fire_Mode.
+1. WHILE all RX_Nodes are in EDGE_Mode, THE Beacon_System SHALL continue detection, room state, and Annunciator display with the Hub disconnected or the Hub process stopped, including during Fire_Mode.
 2. WHILE the Hub is connected and the RX_Nodes are in EDGE_Mode, THE Hub SHALL provide the Dashboard, Crew_Markers, Incident_Record, and training, using Room_State_Packet data relayed over serial as the room-state source.
 3. WHILE in EDGE_Mode, THE RX_Node SHALL transmit only derived room state and health data, and SHALL NOT transmit raw CSI over serial or over the air.
 4. THE RX_Node SHALL transmit raw CSI over serial only in TRAINING_Mode or HUB_Mode, where HUB_Mode is the hackathon fallback and not the deployed configuration.
-5. THE RoomSense_System SHALL present the claim "no single point of failure for detection and display" only for configurations in which both the Annunciator and the Hub Dashboard are available, SHALL NOT claim immunity to power loss, and SHALL state that every Node requires battery backup in deployment.
-6. THE RoomSense_System SHALL document that in the 2-room demo RX1 is both a sensor and the Annunciator, and is therefore a shared point of failure for Room 1 and, with the laptop unplugged, for display.
-7. WHEN the laptop is disconnected during the demo, THE RoomSense_System SHALL keep the RX_Nodes powered from a self-powered USB hub or power banks, or the demo SHALL stop the Hub process instead of removing power.
+5. THE Beacon_System SHALL present the claim "no single point of failure for detection and display" only for configurations in which both the Annunciator and the Hub Dashboard are available, SHALL NOT claim immunity to power loss, and SHALL state that every Node requires battery backup in deployment.
+6. THE Beacon_System SHALL document that in the 2-room demo RX1 is both a sensor and the Annunciator, and is therefore a shared point of failure for Room 1 and, with the laptop unplugged, for display.
+7. WHEN the laptop is disconnected during the demo, THE Beacon_System SHALL keep the RX_Nodes powered from a self-powered USB hub or power banks, or the demo SHALL stop the Hub process instead of removing power.

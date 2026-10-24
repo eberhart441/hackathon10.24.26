@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from ml.baseline import Baseline, window_features
-from roomsense_hub.protocol import CsiRecord, parse_line
+from beacon_hub.protocol import CsiRecord, parse_line
 
 WINDOW_PACKETS = 150  # must match ml/features.py
 MEDIAN_KERNEL = 5     # must match ml/features.py

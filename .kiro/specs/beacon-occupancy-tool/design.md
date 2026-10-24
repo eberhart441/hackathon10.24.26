@@ -2,7 +2,7 @@
 
 ## Overview
 
-RoomSense is an offline network of ESP32 WiFi-sensing nodes that estimates which rooms in a small building are likely still occupied during a fire alarm and presents first responders a prioritized, honest-confidence map. This design implements the 8-hour hackathon build scoped by `requirements.md` (Requirements 1–37), covering the Must and Should tiers, with Could/deferred items noted where they touch the architecture. Requirements 31–37 add an **edge-inference layer [Should]** in which each RX computes features, classifies, and holds room state on-device; the laptop HUB_Mode path remains the Must and the fallback.
+Beacon is an offline network of ESP32 WiFi-sensing nodes that estimates which rooms in a small building are likely still occupied during a fire alarm and presents first responders a prioritized, honest-confidence map. This design implements the 8-hour hackathon build scoped by `requirements.md` (Requirements 1–37), covering the Must and Should tiers, with Could/deferred items noted where they touch the architecture. Requirements 31–37 add an **edge-inference layer [Should]** in which each RX computes features, classifies, and holds room state on-device; the laptop HUB_Mode path remains the Must and the fallback.
 
 The system answers one question — "Is anyone likely still in this room, and how sure are we?" — and deliberately refuses to answer "what does the room look like" or "who is in it." Three design-shaping facts hold throughout:
 
@@ -1298,7 +1298,7 @@ A dual approach: property-based tests cover the universal correctness properties
 - **Library:** [Hypothesis](https://hypothesis.readthedocs.io/) with pytest for the Python hub. Firmware predicates (paired-MAC filter, tag-accept predicate, tag-summary aggregation, jitter generator, packet layout) are ported host-side to small pure Python functions mirroring the C logic and tested with Hypothesis; PBT is not implemented from scratch.
 - **Coverage:** every property in the Correctness Properties section is implemented by a **single** property-based test.
 - **Iterations:** each property test runs a minimum of 100 generated examples (`@settings(max_examples=100)` or higher).
-- **Tagging:** each test carries a comment in the form **Feature: roomsense-occupancy-tool, Property {number}: {property_text}**.
+- **Tagging:** each test carries a comment in the form **Feature: beacon-occupancy-tool, Property {number}: {property_text}**.
 - **Time:** state-engine and localization tests use an injected clock, so 300 s holds, 10 s recovery, and 2 s lead timers are exercised in microseconds.
 - **Generators:** `ClassProbs` on the simplex; window/tick sequences with controlled gaps; heartbeat streams with variable ages and pps; mixed CSI/tag/foreign-MAC frame streams; `TagSummary` streams with varied RSSI, offsets, silence, and lead; system-state and data-kind pairs. Generators deliberately include boundary values: heartbeat ages of exactly 3 s and 10 s, window age exactly 5 s, holds of exactly 300 s, leads of exactly 6 and 10 dB, RSSI exactly −75 and −95 dBm, empty histories, and truncated serial lines.
 

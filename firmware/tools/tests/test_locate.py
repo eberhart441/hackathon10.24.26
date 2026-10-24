@@ -2,8 +2,8 @@
 import json
 import math
 
-from roomsense_hub.locate import Layout, Link, Locator, link_score, link_weight, load_layout
-from roomsense_hub.viewer import DEFAULT_LAYOUT, Hub
+from beacon_hub.locate import Layout, Link, Locator, link_score, link_weight, load_layout
+from beacon_hub.viewer import DEFAULT_LAYOUT, Hub
 
 # Two links crossing in an X over a 10 x 10 ft room; they meet in the middle.
 X = Layout((10.0, 10.0), (Link("A", (0, 0), (10, 10)), Link("B", (10, 0), (0, 10))))
@@ -71,7 +71,7 @@ def test_without_a_layout_the_hub_message_is_unchanged():
 # --- floor-plan walls and the conference-room layout ---------------------------------------------
 
 def test_dxf_walls_convert_inches_to_room_feet_with_y_down(tmp_path):
-    from roomsense_hub.dxf_walls import read_dxf_lines, to_layout
+    from beacon_hub.dxf_walls import read_dxf_lines, to_layout
 
     dxf = tmp_path / "plan.dxf"
     dxf.write_text("\n".join([
@@ -87,7 +87,7 @@ def test_dxf_walls_convert_inches_to_room_feet_with_y_down(tmp_path):
 def test_the_conference_room_layout_loads_with_walls_and_boards_where_marked():
     from pathlib import Path
 
-    from roomsense_hub.locate import load_layout
+    from beacon_hub.locate import load_layout
 
     lay = load_layout(Path(__file__).resolve().parent.parent / "layouts" / "conference-room.json")
     assert lay.room == (13.0, 9.5)
@@ -105,7 +105,7 @@ def test_the_conference_room_layout_loads_with_walls_and_boards_where_marked():
 def test_a_receiver_on_top_of_its_transmitter_never_pulls_the_estimate_into_the_room():
     from pathlib import Path
 
-    from roomsense_hub.locate import Locator, load_layout
+    from beacon_hub.locate import Locator, load_layout
 
     lay = load_layout(Path(__file__).resolve().parent.parent / "layouts" / "conference-room.json")
     out = Locator(lay).update({"RX1": 0.0, "RX2": 0.0, "RX3": 0.0, "RX4": 3.0})

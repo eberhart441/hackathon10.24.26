@@ -1,10 +1,10 @@
 // REST helpers. A phone keeps its token in localStorage under one key (Kiro R2.9, R17.4);
 // the laptop gets a fresh in-memory token from the hub on every start.
 
-const TOKEN_KEY = 'roomsense.token';
+const TOKEN_KEY = 'beacon.token';
 // The responder tag this phone's holder carries ("You are here", parent Req 26.4). A tag id, set by
 // the holder; never a phone or person identifier, and not incident data.
-const MY_TAG_KEY = 'roomsense.tag';
+const MY_TAG_KEY = 'beacon.tag';
 const TAG_ID = /^[A-Za-z0-9_-]{1,4}$/; // the firmware's tag_id rule
 
 export class AuthError extends Error {}

@@ -1,6 +1,6 @@
 """LiveSource: room states from real receivers (or a replay / the board simulator).
 
-Lines from the receivers' serial ports go through roomsense_hub (firmware/tools): the protocol
+Lines from the receivers' serial ports go through beacon_hub (firmware/tools): the protocol
 parser, packet-loss tracking, and each link's MOTION / QUIET / WEAK state with receiver-gain
 correction. room_engine.py turns the links of each room into one of the four room states.
 
@@ -30,8 +30,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from roomsense_hub import TagSummary, format_record, parse_line
-from roomsense_hub.viewer import Hub as LinkHub
+from beacon_hub import TagSummary, format_record, parse_line
+from beacon_hub.viewer import Hub as LinkHub
 
 from . import room_engine, scripted
 from .room_engine import LinkReading, RoomTrack
@@ -153,19 +153,19 @@ class LiveSource(Broadcaster):
         self._spawn(run)
 
     def add_serial_port(self, port: str, baud: int = 921600) -> None:
-        from roomsense_hub.viewer import serial_reader
+        from beacon_hub.viewer import serial_reader
 
         self._spawn(serial_reader, self.links, port, baud, self._stop)
 
     def add_replay(self, path: Path) -> None:
-        from roomsense_hub.viewer import replay_reader
+        from beacon_hub.viewer import replay_reader
 
         self._spawn(replay_reader, self.links, Path(path), self._stop)
 
     def add_board_simulator(self, layout_path: Path) -> None:
         """Fake receivers from firmware/tools (a person walking a loop), for trying without boards."""
-        from roomsense_hub.locate import load_layout
-        from roomsense_hub.simulate import run
+        from beacon_hub.locate import load_layout
+        from beacon_hub.simulate import run
 
         self._spawn(run, load_layout(layout_path), self.feed_line, self._stop)
 

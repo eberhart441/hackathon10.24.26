@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "UI banned words and MAC scan",
+  "description": "Fails if a UI string uses a Banned_Word (empty, clear, cleared, safe) or a MAC address appears in dashboard/src or hub/config (Req 9.6, 6.7, 17.1).",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["dashboard/src/**"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "python tools/scan_ui.py"
+  }
+}

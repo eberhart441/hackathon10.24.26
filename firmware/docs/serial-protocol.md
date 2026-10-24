@@ -1,6 +1,6 @@
 # Serial protocol (firmware to hub)
 
-The authoritative definition is **`.kiro/specs/roomsense-occupancy-tool/design.md`**, section "Serial line formats". This page restates the parts the firmware implements and documents the setup commands, so you do not have to dig through the design. If the two ever disagree, `design.md` wins and the firmware gets fixed.
+The authoritative definition is **`.kiro/specs/beacon-occupancy-tool/design.md`**, section "Serial line formats". This page restates the parts the firmware implements and documents the setup commands, so you do not have to dig through the design. If the two ever disagree, `design.md` wins and the firmware gets fixed.
 
 Requirements covered: 2 (CSI capture and transport), 3 (configuration, heartbeats, reboot resilience), 23 and 24 (responder tag, tag summaries).
 
@@ -117,4 +117,4 @@ If you skip step 3 the transmitter broadcasts, which also works (any receiver pa
 
 ## Reference implementation
 
-`firmware/tools/roomsense_hub/protocol.py` parses and formats every record above (`parse_line`, `format_record`). Use it, or its `format_record` in the simulator, rather than writing a second parser.
+`firmware/tools/beacon_hub/protocol.py` parses and formats every record above (`parse_line`, `format_record`). Use it, or its `format_record` in the simulator, rather than writing a second parser.

@@ -3,8 +3,8 @@ import json
 import random
 from pathlib import Path
 
-from roomsense_hub import CsiRecord, Heartbeat, format_record
-from roomsense_hub.viewer import PAGE, Hub
+from beacon_hub import CsiRecord, Heartbeat, format_record
+from beacon_hub.viewer import PAGE, Hub
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_capture.log"
 TX = "f4:65:0b:c4:d6:e4"
@@ -202,7 +202,7 @@ def test_a_sustained_disturbance_is_still_motion_with_the_glitch_filter():
 # --- the hub decides when a receiver is obviously off ------------------------------------------
 
 def _healthy_hub_with_layout(drop_rx2_after=None):
-    from roomsense_hub.locate import Layout, Link
+    from beacon_hub.locate import Layout, Link
 
     lay = Layout((10.0, 10.0), (Link("RX1", (0, 0), (10, 10)), Link("RX2", (10, 0), (0, 10)), Link("RX3", (0, 5), (10, 5))))
     hub = Hub(lay)
@@ -240,7 +240,7 @@ def test_a_receiver_without_a_heartbeat_is_left_out():
 
 
 def test_a_receiver_that_was_never_plugged_in_is_listed_as_not_connected():
-    from roomsense_hub.locate import Layout, Link
+    from beacon_hub.locate import Layout, Link
 
     hub = Hub(Layout((10.0, 10.0), (Link("RX1", (0, 0), (10, 10)), Link("RX9", (10, 0), (0, 10)))))
     m = json.loads(hub.snapshot_json(0.0))

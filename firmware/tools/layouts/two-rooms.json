@@ -1,5 +1,5 @@
 {
-  "_comment": "Two-room demo (relay mode) on 'floor plans/walls_only.dxf' (inches). The sensed room is Room 1, the lower of the two stacked 13 x 9.5 ft rooms; feet from its top-left inside corner, y going down the page; negative x is the hallway, negative y is Room 2 and the hallway beyond. TX1 stands in the hallway just outside Room 1's door, RX2 and RX3 on Room 1's back wall, RX1 at the far end of the hallway. Positions from hub/config-two-rooms (commit b284555), accurate to about a foot. Walls regenerated with: python -m roomsense_hub.dxf_walls \"floor plans/walls_only.dxf\" --origin 0 -4.5",
+  "_comment": "Two-room demo (relay mode) on 'floor plans/walls_only.dxf' (inches). The sensed room is Room 1, the lower of the two stacked 13 x 9.5 ft rooms; feet from its top-left inside corner, y going down the page; negative x is the hallway, negative y is Room 2 and the hallway beyond. TX1 stands in the hallway just outside Room 1's door, RX2 and RX3 on Room 1's back wall, RX1 at the far end of the hallway. Positions from hub/config-two-rooms (commit b284555), accurate to about a foot. Walls regenerated with: python -m beacon_hub.dxf_walls \"floor plans/walls_only.dxf\" --origin 0 -4.5",
   "room": [
     13.0,
     9.5

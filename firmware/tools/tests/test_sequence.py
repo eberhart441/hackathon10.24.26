@@ -2,7 +2,7 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from roomsense_hub import SequenceTracker
+from beacon_hub import SequenceTracker
 
 
 def feed(values, **kw):

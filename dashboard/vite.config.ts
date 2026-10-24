@@ -22,8 +22,8 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['icons/apple-touch-icon.png', 'icons/favicon.svg'],
       manifest: {
-        name: 'RoomSense',
-        short_name: 'RoomSense',
+        name: 'Beacon',
+        short_name: 'Beacon',
         description: 'Search priority for responders. Decision support only; does not replace a full search.',
         start_url: '/',
         scope: '/',

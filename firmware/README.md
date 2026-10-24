@@ -1,8 +1,8 @@
-# RoomSense node firmware
+# Beacon node firmware
 
-One firmware image for every board. Each board's job is set over serial and saved in flash. It follows the RoomSense design in `.kiro/specs/roomsense-occupancy-tool/design.md`.
+One firmware image for every board. Each board's job is set over serial and saved in flash. It follows the Beacon design in `.kiro/specs/beacon-occupancy-tool/design.md`.
 
-| Role | RoomSense spec name | What it does |
+| Role | Beacon spec name | What it does |
 |------|---------------------|--------------|
 | `tx` | TX_Node (master) | Sends a numbered packet to its paired receiver (or to everyone) 100 times a second, at an OFDM rate so the receiver gets CSI. Prints nothing while running |
 | `rx` | RX_Node (slave) | Listens to its paired transmitter, turns each packet's CSI into 64 amplitudes, prints one `CSI` line per packet, a `HB` heartbeat every second, and `TAG` summaries for responder tags |
@@ -50,7 +50,7 @@ REBOOT
 
 Power the transmitter from any USB supply or power bank. Plug the receiver into the laptop. Within a few seconds the receiver should print `CSI,...` lines and its heartbeat `measured_pps` should be near 100.
 
-### The RoomSense two-room demo
+### The Beacon two-room demo
 
 Two transmitter/receiver pairs plus one tag, five boards in total:
 
@@ -68,7 +68,7 @@ All boards must be on the same channel (default 11; `SET channel=1`, `6` or `11`
 
 ```powershell
 cd firmware\tools
-.\.venv\Scripts\python.exe -m roomsense_hub.viewer --port COM3
+.\.venv\Scripts\python.exe -m beacon_hub.viewer --port COM3
 ```
 
 It opens `http://127.0.0.1:8765` and shows, for each receiver, its health (from the heartbeat), packet rate and loss, a scrolling picture of the signal (subcarrier up the side, time across, brighter = stronger), and an activity line with a MOTION / QUIET badge. Walk between the two boards and the picture changes. The badge is a simple demo indicator, not the detection model; "quiet" never means a room is empty. It listens on 127.0.0.1 only and stores nothing. Close it (Ctrl+C) before flashing or recording, because it holds the serial port. `--replay tests\fixtures\sample_capture.log` shows it without hardware.
@@ -84,7 +84,7 @@ copy authorized_installers.example.txt authorized_installers.txt   # then edit i
 .\.venv\Scripts\rs-capture.exe --port COM3 --port COM4 --label moving --installer alice --consent
 ```
 
-`rs-capture` writes one CSV per class (`empty`, `moving`, `still_present`) under `firmware/tools/data/` (git-ignored). Recording is limited to allow-listed installers and consenting people (requirements 17 and 21.5). Other code should import `roomsense_hub` (`parse_line`, `format_record`) instead of writing a second parser.
+`rs-capture` writes one CSV per class (`empty`, `moving`, `still_present`) under `firmware/tools/data/` (git-ignored). Recording is limited to allow-listed installers and consenting people (requirements 17 and 21.5). Other code should import `beacon_hub` (`parse_line`, `format_record`) instead of writing a second parser.
 
 ## Motion location map (floor plan, boards placed in the app)
 
@@ -160,7 +160,7 @@ idf.py build
 
 The boards are classic ESP32 ("ESP32 Dev Module"). The code also builds for other ESP32 chips with CSI support (`idf.py set-target <chip>`), but only the classic ESP32 has been tested.
 
-After changing the code, rebuild and refresh the committed image: `esptool --chip esp32 merge-bin -o prebuilt/roomsense-esp32.bin @flash_args` from the build folder.
+After changing the code, rebuild and refresh the committed image: `esptool --chip esp32 merge-bin -o prebuilt/beacon-esp32.bin @flash_args` from the build folder.
 
 ## Layout
 

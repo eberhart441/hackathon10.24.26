@@ -4,7 +4,7 @@ This module is the shared feature pipeline: it runs both during training
 (ml/train.py, ml/eval.py) and at inference time on the Pi (pi/room_state.py).
 Keep it pure — no file I/O, no model loading, no side effects.
 
-Input: a session DataFrame as written by CsvSink (firmware/tools/roomsense_hub/ingest.py).
+Input: a session DataFrame as written by CsvSink (firmware/tools/beacon_hub/ingest.py).
 
 CSV columns:
     arrival_unix_s, node_id, tx_mac, seq, ts_us, rssi_dbm, channel,

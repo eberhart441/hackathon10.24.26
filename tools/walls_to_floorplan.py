@@ -3,14 +3,14 @@
     hub/.venv/Scripts/python tools/walls_to_floorplan.py "floor plans/walls_only.dxf" --layout firmware/tools/layouts/conference-room.json --layout-origin 0 114 --write hub/config/floorplan.json
 
 What it does:
-  - walls: every LINE / LWPOLYLINE of the DXF (read with roomsense_hub.dxf_walls, no ezdxf needed)
+  - walls: every LINE / LWPOLYLINE of the DXF (read with beacon_hub.dxf_walls, no ezdxf needed)
     becomes a loop in the floor's "walls" list, in metres. The dashboard fills the space between
     the loops (even-odd), so the wall thickness and the door openings are exactly the drawing's;
   - frame: the floor's origin (0, 0) is the drawing's bottom-left corner (minimum x and y over all
     wall points), y up, as the floor plan convention wants;
   - boards: --layout is the motion-map layout used by rs-view (feet from the sensed room's top-left
     inside corner, y down); --layout-origin is that corner in DXF units (the same numbers as
-    `python -m roomsense_hub.dxf_walls --origin`). Each board is put in the floor plan room whose
+    `python -m beacon_hub.dxf_walls --origin`). Each board is put in the floor plan room whose
     polygon contains it, so a board in the hallway counts for the hallway, not for the room.
 
 The rooms themselves (ids, names, polygons, doors) stay hand-edited in the floor plan: a
@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "firmware" / "tools"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from roomsense_hub.dxf_walls import read_dxf_text  # noqa: E402
+from beacon_hub.dxf_walls import read_dxf_text  # noqa: E402
 
 from dxf_to_floorplan import (  # noqa: E402
     FT, SOURCE_DATE, UNIT_NAMES, ConvertError, Vec, _seg_dist, dumps_plan, point_in_polygon, unit_scale,

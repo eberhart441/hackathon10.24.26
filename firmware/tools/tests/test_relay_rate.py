@@ -2,9 +2,9 @@
 import json
 import random
 
-from roomsense_hub import CsiRecord, Heartbeat, format_record
-from roomsense_hub.locate import Layout, Link
-from roomsense_hub.viewer import Hub
+from beacon_hub import CsiRecord, Heartbeat, format_record
+from beacon_hub.locate import Layout, Link
+from beacon_hub.viewer import Hub
 
 TX = "4c:c3:82:28:1d:0c"
 

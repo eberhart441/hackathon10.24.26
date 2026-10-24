@@ -1,6 +1,6 @@
 """Parse and format the node serial protocol.
 
-The formats are the ones in .kiro/specs/roomsense-occupancy-tool/design.md ("Serial line
+The formats are the ones in .kiro/specs/beacon-occupancy-tool/design.md ("Serial line
 formats"); firmware/docs/serial-protocol.md summarises them plus the setup commands.
 
 `parse_line` is total: it returns a record, or None for anything that is not a valid

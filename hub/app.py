@@ -24,7 +24,7 @@ DEFAULT_CONFIG_DIR = HUB_DIR / "config"
 DEFAULT_STATIC_DIR = HUB_DIR / "static"
 
 NO_SHELL_PAGE = """<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>RoomSense hub</title></head>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Beacon hub</title></head>
 <body style="font-family:system-ui;background:#111;color:#eee;padding:24px">
 <p><strong>Decision support only — does not replace a full search.</strong></p>
 <p>The hub is running, but the dashboard has not been built yet.
@@ -58,7 +58,7 @@ def create_app(
         finally:
             await source.stop()
 
-    app = FastAPI(title="RoomSense hub", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Beacon hub", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.auth = auth
     app.state.source = source
 

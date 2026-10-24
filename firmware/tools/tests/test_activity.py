@@ -4,7 +4,7 @@ import random
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from roomsense_hub.activity import GainReference, live_mean, normalize_gain
+from beacon_hub.activity import GainReference, live_mean, normalize_gain
 
 packets = st.lists(st.integers(0, 255), min_size=8, max_size=64).filter(lambda a: any(a))
 

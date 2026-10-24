@@ -171,7 +171,7 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - **Terminology:** the team keeps **master** (the one node that broadcasts) and **slave** (a node that listens), plus **link** and **node**. See `GLOSSARY.md`.
 - **Boards:** confirmed with `esptool chip-id` on the first board: a **classic ESP32** (ESP32-D0WD-V3, the Arduino "ESP32 Dev Module"), not a C3. The firmware also builds for the C3, but the flash images for the ESP32 are the ones to use. Any extra boards should be the same model so all nodes match. Classic ESP32 has no receive-gain compensation in the esp-csi example.
 - **Firmware status:** one runtime-configured firmware image for `tx`, `rx` and `tag` roles lives in `firmware/` (on the `firmware` branch). It now follows `design.md`'s serial formats (CSI, receiver-only HB, TAG, `SET key=value` setup, TX unicast to a paired RX, 4-byte tag IDs). On one real ESP32 (receiver role) it boots, prints valid protocol lines and handles serial commands; the transmitter-to-receiver CSI path has **not** been tested yet. Not built: EDGE/TRAINING modes, RSST/FEAT, `peers`, the annunciator. Serial contract: `firmware/docs/serial-protocol.md`. Flashing uses the Arduino IDE's esptool via `firmware/flash.ps1` (the Arduino IDE itself cannot upload an ESP-IDF image).
-- **Meshing with the RoomSense spec** (`.kiro/specs/roomsense-occupancy-tool`): the firmware's serial output follows `design.md` exactly. CSI lines carry node, TX MAC, sequence, timestamp, RSSI, channel and per-subcarrier amplitude (Req 2.3); only receivers send 1 Hz heartbeats (Req 3); setup is `SET key=value` and stored across reboots (Req 3); `TAG,...` summaries match Req 24.4. Replies to setup commands (`OK,SET,...`, `ERR,SET,...`, `CFG,...`) and the `role` setting are additions. Not built: UDP, EDGE/TRAINING modes, RSST/FEAT.
+- **Meshing with the Beacon spec** (`.kiro/specs/beacon-occupancy-tool`): the firmware's serial output follows `design.md` exactly. CSI lines carry node, TX MAC, sequence, timestamp, RSSI, channel and per-subcarrier amplitude (Req 2.3); only receivers send 1 Hz heartbeats (Req 3); setup is `SET key=value` and stored across reboots (Req 3); `TAG,...` summaries match Req 24.4. Replies to setup commands (`OK,SET,...`, `ERR,SET,...`, `CFG,...`) and the `role` setting are additions. Not built: UDP, EDGE/TRAINING modes, RSST/FEAT.
 - **Privacy enforcement:** extra work on tests/hooks to enforce the privacy rules is **deprioritized for now** (team decision). The stock MAC filter in `csi_recv` stays on because it is already in the example. Revisit before submission, and do not claim in the pitch that privacy is enforced by tests or hooks unless we build them.
 
 **Decided (firmware, round 2)**
@@ -181,9 +181,9 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 
 **Decided (live data, 2026-10-24)**
 - **Raw CSI to the laptop is allowed** (HUB mode) and Privacy Rule 1 is reworded to match. The existing in-room motion map (`locate.py`, `rs-view --layout`) stays as is.
-- **Receiver gain jumps are corrected on the hub:** each packet is scaled to the link's fixed reference level before measuring activity (`firmware/tools/roomsense_hub/activity.py`), so a classic-ESP32 gain change no longer reads as motion.
+- **Receiver gain jumps are corrected on the hub:** each packet is scaled to the link's fixed reference level before measuring activity (`firmware/tools/beacon_hub/activity.py`), so a classic-ESP32 gain change no longer reads as motion.
 - **Room 101 is 13 ft x 9 ft 4 in with a 32 in door.** `tools/dxf_to_floorplan.py` can build it from `floor plans/conference_room.dxf` with a `--height 9ft4in` override (the DXF is drawn 2 in too deep). Superseded for the dashboard by the walls-only plan below.
-- **Live dashboard data:** `tools/live_hub.py` reads the receivers (or `--simulate-boards` / `--replay`) through `roomsense_hub` and a rule-based room state engine (`hub/room_engine.py`). There is no trained model yet; confidence is a heuristic and must be described that way. Rooms are matched by the floor plan's node list, not the boards' `room_id`.
+- **Live dashboard data:** `tools/live_hub.py` reads the receivers (or `--simulate-boards` / `--replay`) through `beacon_hub` and a rule-based room state engine (`hub/room_engine.py`). There is no trained model yet; confidence is a heuristic and must be described that way. Rooms are matched by the floor plan's node list, not the boards' `room_id`.
 
 - **Simple phone view (decided 2026-10-24, revised the same day):** the iPhone shows only the floor plan's rooms, each with its priority, name, state and one status line inside it; no buttons and no text outside the rooms. The laptop keeps the full 3D presenter view. Responder tags are located room by room from receiver `TAG` lines (`hub/tag_locator.py`), only during an incident.
 - **"You are here" on the phone (2026-10-24):** the phone is bound to the responder tag its holder carries (pairing screen or `?tag=E1`) and shows that tag as YOU. The phone itself is never located: sniffing phones is banned by the privacy rules, and GPS cannot resolve rooms indoors.
@@ -214,7 +214,7 @@ Checked against Espressif's esp-csi repo (Apache-2.0 licensed, examples under `e
 
 ## Firmware Design (draft v1 — partly superseded)
 
-> **Superseded in part.** The serial formats, setup commands and roles below were the first draft. The current ones follow the team's `.kiro/specs/roomsense-occupancy-tool/design.md` and are documented in `firmware/docs/serial-protocol.md`. The goals, the laptop-side responsibilities and the bring-up order below still apply; where details differ (line formats, `CFG SET`, heartbeats from every role), use the protocol doc.
+> **Superseded in part.** The serial formats, setup commands and roles below were the first draft. The current ones follow the team's `.kiro/specs/beacon-occupancy-tool/design.md` and are documented in `firmware/docs/serial-protocol.md`. The goals, the laptop-side responsibilities and the bring-up order below still apply; where details differ (line formats, `CFG SET`, heartbeats from every role), use the protocol doc.
 
 **Goal:** get clean per-link CSI amplitude from two slaves to the laptop at 100 packets/s, with one master broadcasting. Everything else (calibration, the model, the state machine, the dashboard) lives on the laptop.
 
@@ -309,11 +309,11 @@ Judges may score from the video, description, and images alone. **The video is t
 | Kiro feature | Our plan | Done? |
 |--------------|----------|-------|
 | Tools (IDE / CLI / Web / Crew) | At least two. E.g. CLI for firmware/build scripts, IDE for specs/hooks/dashboard. Note how they differed. | [ ] |
-| Spec-driven development | Requirements → design → tasks for the room state machine and flag logic, with the privacy rules written in as formal requirements. Keep a short "spec vs. vibe coding" comparison note. | [ ] |
-| Agent hooks | **Privacy hook:** on save/commit, reject any change that adds MAC addresses, raw CSI, identifiers, or finer-than-room detail to outbound data. Also: run host tests on save. | [ ] |
-| Steering docs | Privacy rules, the "never clear a room" framing, node pin assignments/hardware constraints, code style. | [ ] |
+| Spec-driven development | Requirements → design → tasks for the room state machine and flag logic, with the privacy rules written in as formal requirements. Keep a short "spec vs. vibe coding" comparison note. | [x] `.kiro/specs/beacon-occupancy-tool` (requirements-first) and `.kiro/specs/pwa-dashboard` (fast task; tasks executed by subagents). Comparison note in the README. |
+| Agent hooks | **Privacy hook:** on save/commit, reject any change that adds MAC addresses, raw CSI, identifiers, or finer-than-room detail to outbound data. Also: run host tests on save. | [x] Partly: `.kiro/hooks` runs dashboard tests on save, the banned-word/MAC scan (`tools/scan_ui.py`), and the service-worker no-runtime-cache check. The hub-side privacy hook is not built yet. |
+| Steering docs | Privacy rules, the "never clear a room" framing, node pin assignments/hardware constraints, code style. | [x] `.kiro/steering/project.md` (always) and `.kiro/steering/ui.md` (`dashboard/**` only). |
 | MCP | Serial monitor MCP so Kiro can read the live CSI/motion stream and help tune thresholds against real data. Possibly GitHub MCP. | [ ] |
-| Property-based testing | Hypothesis tests on the state machine, trails, packets, and privacy invariants (see Architecture §6). Written in parallel with the hardware build. | [ ] |
+| Property-based testing | Hypothesis tests on the state machine, trails, packets, and privacy invariants (see Architecture §6). Written in parallel with the hardware build. | [x] Hypothesis (protocol, sequence, gain correction, room engine, scripted incident, tag locator, DXF import) and fast-check (dashboard view model). |
 | Powers | Check what's installable; use any that fit. | [ ] |
 
 Running notes (add dated bullets as things happen):
@@ -324,14 +324,21 @@ Running notes (add dated bullets as things happen):
 
 ## Team
 
-<!-- TODO: names + owners. Team size: 4 (max allowed). Known so far: one person on firmware, one buying ESP32s, one building the ML model. -->
+Team size: 4 (the maximum). All four go on the submission form.
 
-| Name | Role | Owns |
-|------|------|------|
-|  | Firmware / nodes | esp-csi, ESP-NOW, on-node motion score, node layout |
-|  | Processing / logic | Zone fusion, self-calibration, state machine, flag rule |
-|  | Dashboard | Floor-plan editor, incident view, timeline, WebSocket client |
-|  | Simulator / tests / Kiro | Simulator, Hypothesis PBT, hooks, Kiro write-up |
+- William Goldman
+- Simon Eberhart
+- Joao Pedro da Cunha Lepecki
+- Rakshi Rangaprasad
+
+<!-- TODO: who owns what (firmware / nodes, processing / logic, dashboard, simulator / tests / Kiro). -->
+
+| Area | Owns |
+|------|------|
+| Firmware / nodes | esp-csi, ESP-NOW, on-node motion score, node layout |
+| Processing / logic | Zone fusion, self-calibration, state machine, flag rule |
+| Dashboard | Floor-plan editor, incident view, timeline, WebSocket client |
+| Simulator / tests / Kiro | Simulator, Hypothesis PBT, hooks, Kiro write-up |
 
 ## Milestones (~8 hours)
 

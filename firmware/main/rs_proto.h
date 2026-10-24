@@ -1,6 +1,6 @@
 #pragma once
 /* Formatting of serial protocol records, exactly as defined in
- * .kiro/specs/roomsense-occupancy-tool/design.md ("Serial line formats") and summarised in
+ * .kiro/specs/beacon-occupancy-tool/design.md ("Serial line formats") and summarised in
  * firmware/docs/serial-protocol.md. Every function writes a complete line INCLUDING the trailing
  * '\n' into `buf` and returns its length, or 0 if `cap` is too small. */
 

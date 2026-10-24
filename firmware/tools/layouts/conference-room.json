@@ -1,5 +1,5 @@
 {
-  "_comment": "Conference room from 'floor plans/walls_only.dxf' (drawn in inches): the room is 156 x 114 in = 13 x 9.5 ft. Feet from the room's top-left inside corner, y going down the page; negative x is the hallway to the left. Board positions come from the team's marked-up screenshot (1, 2 in the right-hand corners, 3 in the middle, 4 in the hallway), accurate to about a foot. TX1 stands at the same spot as RX4. Walls regenerated with: python -m roomsense_hub.dxf_walls \"floor plans/walls_only.dxf\" --origin 0 114",
+  "_comment": "Conference room from 'floor plans/walls_only.dxf' (drawn in inches): the room is 156 x 114 in = 13 x 9.5 ft. Feet from the room's top-left inside corner, y going down the page; negative x is the hallway to the left. Board positions come from the team's marked-up screenshot (1, 2 in the right-hand corners, 3 in the middle, 4 in the hallway), accurate to about a foot. TX1 stands at the same spot as RX4. Walls regenerated with: python -m beacon_hub.dxf_walls \"floor plans/walls_only.dxf\" --origin 0 114",
   "room": [
     13.0,
     9.5

@@ -2,7 +2,7 @@
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from roomsense_hub import (
+from beacon_hub import (
     CsiRecord,
     Heartbeat,
     Response,
@@ -77,7 +77,7 @@ def test_boot_rom_and_idf_log_lines_are_ignored():
         "rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)",
         "I (312) wifi:mode : sta (24:6f:28:00:00:01)",
         "W (1203) csi: something odd",
-        "roomsense> ",
+        "beacon> ",
         "",
         "   ",
         "\r\n",

@@ -1,4 +1,4 @@
-/* RoomSense node firmware: one image for the transmitter, receiver, and responder tag.
+/* Beacon node firmware: one image for the transmitter, receiver, and responder tag.
  * The role and names live in flash and are set over serial (see firmware/docs/serial-protocol.md).
  *
  * CSI capture is based on Espressif's esp-csi csi_send / csi_recv examples

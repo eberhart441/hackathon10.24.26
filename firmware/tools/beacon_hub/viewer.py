@@ -548,7 +548,7 @@ def main(argv: list[str] | None = None) -> int:
 
     server = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(hub))
     url = f"http://127.0.0.1:{args.http_port}"
-    print(f"RoomSense live view at {url}  (Ctrl+C to stop)")
+    print(f"Beacon live view at {url}  (Ctrl+C to stop)")
     if plan is not None and plan.folder is not None:
         print(f"Floor plan and board positions are saved in {plan.folder}")
     if not args.no_browser:
@@ -567,7 +567,7 @@ PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>RoomSense live view</title>
+<title>Beacon live view</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { color-scheme: dark; }
@@ -611,7 +611,7 @@ PAGE = r"""<!doctype html>
 </style>
 </head>
 <body>
-<h1>RoomSense live view</h1>
+<h1>Beacon live view</h1>
 <p class="note">Raw signal from the receiver, for checking the boards. The badge is a simple demo indicator,
 not the detection model, and &ldquo;quiet&rdquo; never means a room is empty. Walk between the two boards and watch the picture change.</p>
 <div id="errors"></div>

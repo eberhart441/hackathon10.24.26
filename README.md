@@ -3,7 +3,9 @@
 _Last updated: 2026-10-24._
 **WiFi sensing that tells firefighters which rooms to search first.**
 
-Hackachusetts entry, **Civic Action** track (theme V2, *Responsive and resilient communities*). Inside the code the system is called **RoomSense**. You will see that name in the firmware, the Python packages and the specs.
+Hackachusetts entry, **Civic Action** track (theme V2, *Responsive and resilient communities*).
+
+**Team:** William Goldman, Simon Eberhart, Joao Pedro da Cunha Lepecki, Rakshi Rangaprasad.
 
 ![rs-view estimating where a simulated walker is in the demo room](docs/images/rs-view-map.png)
 
@@ -57,7 +59,7 @@ Two lines in **The Solution** describe the planned design, not this build:
 ```
  ┌────────────┐  ESP-NOW packets,   ┌────────────┐  USB serial   ┌──────────────────────────┐  HTTPS + WebSocket  ┌──────────────┐
  │ Transmitter│  100 per second     │  Receivers │  CSI + HB     │ Hub laptop               │  room states only   │  Dashboard   │
- │ (TX node)  │ ──────────────────► │ (RX nodes) │ ────────────► │  roomsense_hub (parse,   │ ──────────────────► │  laptop view │
+ │ (TX node)  │ ──────────────────► │ (RX nodes) │ ────────────► │  beacon_hub (parse,      │ ──────────────────► │  laptop view │
  │ power bank │   people moving     │ 1 per link │  lines        │  gain fix, activity)     │                     │  iPhone view │
  └────────────┘   through the link  └────────────┘               │  room_engine (states)    │                     └──────────────┘
                   disturb the CSI                                 │  tag_locator (crews)     │
@@ -82,7 +84,7 @@ Two lines in **The Solution** describe the planned design, not this build:
 |---|---|
 | [`firmware/`](firmware/) | ESP-IDF firmware for every node (C, built on Espressif's esp-csi examples), a prebuilt flash image, and `flash.ps1`. See [firmware/README.md](firmware/README.md). |
 | [`firmware/docs/serial-protocol.md`](firmware/docs/serial-protocol.md) | The serial line format the boards print (`CSI`, `HB`, `TAG`, `SET`/`GET`). Every Python component reads this format. |
-| [`firmware/tools/roomsense_hub/`](firmware/tools/roomsense_hub/) | The Python package on the hub side: protocol parser, packet sequence tracking, gain correction and activity measure, motion location, board simulator, and four command-line tools: **`rs-view`**, `rs-setup`, `rs-capture`, `rs-record`. |
+| [`firmware/tools/beacon_hub/`](firmware/tools/beacon_hub/) | The Python package on the hub side: protocol parser, packet sequence tracking, gain correction and activity measure, motion location, board simulator, and four command-line tools: **`rs-view`**, `rs-setup`, `rs-capture`, `rs-record`. |
 | [`firmware/tools/layouts/`](firmware/tools/layouts/) | Room and board positions (feet) for the motion map: `demo-room.json` and `conference-room.json`. |
 | [`hub/`](hub/) | FastAPI hub: pairing and tokens, laptop-only controls, room state engine, tag locator, live and mock data sources, WebSocket, and the built dashboard in `hub/static/`. |
 | [`dashboard/`](dashboard/) | The responder dashboard (Vite + TypeScript + Preact, three.js 3D plan with an SVG 2D fallback, installable as a PWA). See [dashboard/README.md](dashboard/README.md). |
@@ -90,7 +92,8 @@ Two lines in **The Solution** describe the planned design, not this build:
 | [`floor plans/`](floor%20plans/) | DXF drawings of the demo conference room. |
 | [`ml/`](ml/) | Experimental: a 1-D CNN motion classifier (train, evaluate, convert to TFLite / INT8 for microcontrollers). No trained model is committed. |
 | [`python/link_test.py`](python/link_test.py), `firmware/board_check`, `firmware/espnow_*` | Alternative approach, not the main system: PIR/radar sensor nodes over ESP-NOW. See [FIELD_TESTING.md](FIELD_TESTING.md). Not yet compiled. |
-| [`.kiro/`](.kiro/) | Kiro specs (`specs/roomsense-occupancy-tool/`: requirements and design) and steering. Required by the competition. |
+| [`.kiro/`](.kiro/) | Kiro specs (`specs/beacon-occupancy-tool/` and `specs/pwa-dashboard/`), steering (`project.md`, `ui.md`) and agent hooks. Required by the competition. See [How we used Kiro](#how-we-used-kiro). |
+| [`tools/scan_ui.py`](tools/scan_ui.py), [`tools/check_pins.py`](tools/check_pins.py) | Checks run by the Kiro hooks and by hand: banned UI words and MAC addresses, and exact dependency pins. |
 | [`CONTEXT.md`](CONTEXT.md) | Project source of truth: event rules, architecture, decisions, open questions, Kiro usage log. |
 | [`GLOSSARY.md`](GLOSSARY.md) | Shared vocabulary (master/slave vs. TX_Node/RX_Node, link, zone, flag, …). |
 | [`AGENTS.md`](AGENTS.md) | Ground rules for AI agents working in this repo. |
@@ -346,9 +349,79 @@ These are hard constraints for the code, the UI and the pitch. Full text is in [
 
 ## How we used Kiro
 
-- **Spec-driven development:** requirements and design for the whole system live in [`.kiro/specs/roomsense-occupancy-tool/`](.kiro/specs/roomsense-occupancy-tool/). The firmware's serial format and the hub's room rules follow that design.
-- **Steering:** [`.kiro/steering/project.md`](.kiro/steering/project.md) puts the privacy rules, the "never clear a room" framing and the pure-function testing convention in front of every agent.
-- **Property-based testing:** Hypothesis (Python) and fast-check (TypeScript) cover the decision logic.
+We built Beacon in the **Kiro IDE**. Our approach was to put the safety and privacy rules into documents Kiro reads on every request, write a spec for anything with safety consequences, and let hooks and property tests catch the mistakes an AI (or a tired human) makes at hour seven. Everything below is in [`.kiro/`](.kiro/).
+
+### Spec-driven development
+
+We wrote two specs and tried a different Kiro spec workflow for each.
+
+| Spec | Kiro workflow | What it covers |
+|---|---|---|
+| [`beacon-occupancy-tool`](.kiro/specs/beacon-occupancy-tool/) | Requirements-first | The whole system: nodes, serial formats, detection, the room state engine, fire mode, calibration, privacy and failure handling. 37 requirements in EARS form and a design with 53 numbered correctness properties. |
+| [`pwa-dashboard`](.kiro/specs/pwa-dashboard/) | Fast task | The responder dashboard: pairing, HTTPS, the phone PWA, laptop-only controls, and the visual encoding. 23 requirements, a design with 26 correctness properties, and a 14-step task plan. |
+
+How we structured the specs so Kiro could build from them:
+
+- **The safety rules are requirements, not comments.** "The interface never displays *empty*", "Unknown ranks above No detection", "nothing is stored outside an incident" and "raw CSI never leaves the hub" are numbered acceptance criteria. Kiro cites them in code (for example `Kiro R9.7` in `dashboard/src/scene/palette.ts`), and tests check them.
+- **Every task ends with a "Done when" command.** The `pwa-dashboard` task list has 81 of them, for example `python -m pytest hub/tests/test_pairing_prop.py -q passes`. A task is finished when its command passes, not when the code looks right. Tasks were run one at a time by Kiro subagents.
+- **Scope cuts are in the plan.** The task list names a cut order (crew chips, then floor-2 rooms, then the snapshot inset, then the 3D renderer). When time ran short, we cut by number instead of arguing about it.
+- **The specs are the system's contract.** The firmware's serial line format and the hub's room rules follow `beacon-occupancy-tool/design.md`. [`firmware/docs/serial-protocol.md`](firmware/docs/serial-protocol.md) points back to it as the authoritative definition.
+
+**Spec vs. vibe coding.** Our first plan was to vibe-code the dashboard because it looked simple (see the decisions log in [CONTEXT.md](CONTEXT.md)). But its hardest parts are rules, not layout: which room ranks first, what a stale reading looks like, who may end an incident, and what a phone may store. With a spec, we settled those once, in plain language, before writing code, and each rule got a test. We kept vibe coding for quick experiments where a wrong guess is cheap.
+
+The `pwa-dashboard` tasks were first run on the branch `feat/pwa-kiro`, where the hub web layer lived in `hub/web/`. The dashboard on `main` is the consolidated version built to the same requirements, so a few file paths in `tasks.md` refer to that branch.
+
+### Steering
+
+- [`project.md`](.kiro/steering/project.md) is **always included**. It holds the rules no agent may break: never clear a room, detect but never identify, no MAC addresses or device identifiers, no overclaiming, and keep decision logic in pure functions so it can be property-tested. It points to [`CONTEXT.md`](CONTEXT.md) and [`AGENTS.md`](AGENTS.md) rather than copying them, so there is one source of truth.
+- [`ui.md`](.kiro/steering/ui.md) is **included only for `dashboard/**` files** (`inclusion: fileMatch`). It holds the state palette (fill, pattern, icon and label for every state, never green), the banned words, the 56 px touch targets, the laptop-only controls, and "the client never re-ranks rooms".
+
+What made the biggest difference was splitting the steering by scope. The privacy and wording rules are short and always on. The detailed visual rules load only when Kiro is working on the dashboard, so they don't crowd firmware or hub work, and dashboard code comes back already following the palette and wording.
+
+### Agent hooks
+
+| Hook | Trigger | What it does |
+|---|---|---|
+| [Dashboard property tests on save](.kiro/hooks/dashboard-props-on-save.json) | A file under `dashboard/src` is saved | Runs the Vitest unit and fast-check property tests. |
+| [UI banned words and MAC scan](.kiro/hooks/ui-banned-words.json) | A file under `dashboard/src` is saved | Runs [`tools/scan_ui.py`](tools/scan_ui.py). It fails if any UI string says "empty", "clear", "cleared" or "safe", or if a MAC address appears in the dashboard or the floor-plan config. |
+| [Service worker has no runtime caching](.kiro/hooks/sw-no-runtime-cache.json) | `dashboard/vite.config.ts` changes | Rebuilds the dashboard and fails if the service worker caches anything at runtime, so a responder never sees a cached room state as live. |
+
+Each hook turns a safety rule from the spec into a check that runs automatically. The wording rule ("never clear a room") is easy for an AI to break with a friendly label like "Room clear". The hook catches that on save, before it reaches a demo.
+
+### Property-based testing
+
+Kiro wrote the design's correctness properties first, then a property test for each one. Each test names the property and the requirements it covers (for example *Property 21: pairing codes work once, only while current and unexpired. Validates: Requirements 2.1, 2.2, 2.3*). We used Hypothesis in Python and fast-check in TypeScript.
+
+- **Serial protocol** (`firmware/tools/tests/test_protocol.py`, `test_sequence.py`, `test_activity.py`):
+  - Every record survives a format/parse round trip.
+  - Arbitrary text or bytes never crash the parser.
+  - Lost packets always equal the missing sequence numbers.
+  - A common gain factor cancels exactly, so a receiver gain jump is never read as motion.
+- **Room state engine** (`hub/tests/test_room_engine.py`): the safety rules hold for any sequence of link readings. A room is never shown as "no detection" without a full quiet hold time.
+- **Scripted incident** (`hub/tests/test_scripted_props.py`):
+  - Ranking always follows the search-priority order.
+  - No frame ever carries a MAC address or a banned word.
+  - An idle frame never carries occupancy data.
+- **Responder tags** (`hub/tests/test_tag_locator.py`): a low-confidence location is never shown as a single room.
+- **Floor plans** (`hub/tests/test_dxf_to_floorplan.py`): DXF rooms round-trip into valid floor plans.
+- **Dashboard** (`dashboard/tests/model.test.ts`):
+  - No banned word is ever shown.
+  - The priority list is exactly the hub's ranking.
+  - Crew markers never use a state color.
+  - Stale or uncalibrated rooms always look UNKNOWN.
+  - Five seconds of silence greys every room and raises the hub-lost banner.
+- **Pairing and auth** (`hub/tests/test_*_prop.py` on the `feat/pwa-kiro` branch):
+  - Pairing codes are single-use and expire.
+  - The rate limiter holds under any request timing.
+  - Every route rejects a missing or wrong token.
+  - Only the laptop can trigger or end an incident.
+
+We used property tests for rules that must hold for every input: privacy, ranking, wording, failure display, and auth. Plain unit tests cover fixed examples, such as the exact serial line format and the committed floor plan.
+
+### Other Kiro features
+
+- **Subagents** carried out spec tasks one at a time and explored the codebase before larger changes.
+- **MCP and Powers** were not used in this build. The next step is a serial-monitor MCP server, so Kiro can read the live CSI stream from the receivers and help tune thresholds against real data.
 
 The running log is in the *Kiro Plan & Usage Log* section of [CONTEXT.md](CONTEXT.md).
 

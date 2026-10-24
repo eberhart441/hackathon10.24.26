@@ -1,7 +1,7 @@
 """Room state from live link readings (pure, injected clock).
 
 This is the parent design's state engine (design.md, "Room-state model with Last_Evidence hold")
-driven by the per-link activity heuristic in firmware/tools/roomsense_hub/viewer.py, because no
+driven by the per-link activity heuristic in firmware/tools/beacon_hub/viewer.py, because no
 trained classifier exists yet. The rules that keep it honest are the design's:
 
   - Four states only. MOTION never goes straight to NO_DETECTION; it passes through POSSIBLE.

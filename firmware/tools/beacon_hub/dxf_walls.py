@@ -4,7 +4,7 @@ Layout coordinates are feet, measured from the top-left inside corner of the sen
 y going DOWN the page (DXF y goes up). Only LINE and LWPOLYLINE entities are read, which is what
 simple floor-plan exports contain.
 
-    python -m roomsense_hub.dxf_walls "floor plans/walls_only.dxf" --origin 0 114
+    python -m beacon_hub.dxf_walls "floor plans/walls_only.dxf" --origin 0 114
         prints the walls as JSON, ready to paste into a layout's "walls" key.
 
 --origin is the room's top-left inside corner in the DXF's own units; --units-per-ft is 12 for a

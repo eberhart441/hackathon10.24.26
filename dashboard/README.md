@@ -1,6 +1,6 @@
-# RoomSense dashboard (PWA)
+# Beacon dashboard (PWA)
 
-Phone-installable responder dashboard plus the FastAPI hub web layer that serves it. Built to `.kiro/specs/pwa-dashboard/requirements.md` and the parent spec `.kiro/specs/roomsense-occupancy-tool/`.
+Phone-installable responder dashboard plus the FastAPI hub web layer that serves it. Built to `.kiro/specs/pwa-dashboard/requirements.md` and the parent spec `.kiro/specs/beacon-occupancy-tool/`.
 
 > Provenance: this is the backup implementation on branch `claude/pwa-backup`, written by Claude Code in parallel with the Kiro build. It follows the same endpoints, file paths and message shapes as the Kiro spec, so either version can replace the other.
 
@@ -17,7 +17,7 @@ Phone-installable responder dashboard plus the FastAPI hub web layer that serves
 | `hub/static/` | Built app, committed so the hub runs without Node. |
 | `tools/mock_hub.py` | Hub with a scripted incident; every message is labeled SIMULATED. |
 | `tools/live_hub.py` | Hub on real receivers (or `--simulate-boards` / `--replay`). |
-| `hub/live_source.py`, `hub/room_engine.py` | Live data: receivers → link states (via `firmware/tools/roomsense_hub`) → room states. |
+| `hub/live_source.py`, `hub/room_engine.py` | Live data: receivers → link states (via `firmware/tools/beacon_hub`) → room states. |
 | `tools/walls_to_floorplan.py` | Puts the walls of `floor plans/walls_only.dxf` and the boards of an rs-view layout into the floor plan. |
 | `tools/dxf_to_floorplan.py` | Older one-room converter for `floor plans/conference_room.dxf` (not used by the current plan). |
 
@@ -123,5 +123,5 @@ Hub tests: `hub/.venv/Scripts/python -m pytest hub/tests -q`
 - **Ranking:** the priority list is the hub's `ranking`, filtered to flagged rooms. The app never re-sorts it. Rank 1 gets the halo.
 - **Stale data:** a stale or uncalibrated room is drawn as UNKNOWN with "last known …, m:ss ago". After 5 s with no hub message, a full-width HUB LOST banner appears and every room is greyed.
 - **Room-level only:** motion rings start at the room center. There are no person figures, footprints, heatmaps or smoke. Crew markers use only white and black. A low-confidence crew location shows "Near A / B" or "Between rooms", never a single room.
-- **Privacy:** the service worker caches the app's own files only, with no runtime caching. Room and crew data live only in memory and are dropped when the incident ends. The only thing written to `localStorage` is `roomsense.token`.
+- **Privacy:** the service worker caches the app's own files only, with no runtime caching. Room and crew data live only in memory and are dropped when the incident ends. The only thing written to `localStorage` is `beacon.token`.
 - **3D fallback:** if WebGL is missing, the graphics context is lost, or frames take over 33 ms, the app switches to the 2D view and says why.

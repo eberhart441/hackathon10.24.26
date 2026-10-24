@@ -7,9 +7,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from roomsense_hub import CsiRecord, format_record
-from roomsense_hub.floorplan import FloorPlan, tx_label
-from roomsense_hub.viewer import Hub, make_handler
+from beacon_hub import CsiRecord, format_record
+from beacon_hub.floorplan import FloorPlan, tx_label
+from beacon_hub.viewer import Hub, make_handler
 
 TX = "4c:c3:82:28:1d:0c"
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"

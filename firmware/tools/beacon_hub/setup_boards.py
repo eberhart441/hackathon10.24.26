@@ -73,7 +73,7 @@ def _save_board(node_id: str, mac: str, role: str, **extra: str) -> None:
 def _configure(port: str, baud: int, settings: dict[str, str]) -> dict[str, str]:
     with _open(port, baud) as ser:
         if not any(r.startswith("PONG") for r in _command(ser, "PING")):
-            raise SystemExit(f"{port}: no reply to PING. Is the RoomSense firmware flashed, and is the "
+            raise SystemExit(f"{port}: no reply to PING. Is the Beacon firmware flashed, and is the "
                              "Arduino Serial Monitor (or rs-view) closed?")
         pairs = " ".join(f"{k}={v}" for k, v in settings.items())
         replies = _command(ser, f"SET {pairs}")
@@ -103,7 +103,7 @@ def cmd_info(args) -> int:
     with _open(args.port, args.baud) as ser:
         cfg = _config(ser)
     if not cfg:
-        print(f"{args.port}: no reply. Is the RoomSense firmware flashed?")
+        print(f"{args.port}: no reply. Is the Beacon firmware flashed?")
         return 1
     for k, v in cfg.items():
         print(f"{k:12} {v}")

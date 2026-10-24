@@ -13,9 +13,12 @@ Phone-installable responder dashboard plus the FastAPI hub web layer that serves
 | `dashboard/src/render3d/` | three.js renderer (walls, doors, furniture, nodes, link beams, state patterns, HTML labels). |
 | `dashboard/src/render2d/` | SVG renderer; also the alarm-time snapshot inset. |
 | `hub/` | FastAPI web layer: pairing, tokens, laptop-only controls, `/api/floorplan`, WebSocket, static app. |
-| `hub/config/floorplan.json` | The hand-edited floor plan (meters). Edit and reload the app; no rebuild needed. |
+| `hub/config/floorplan.json` | The floor plan (meters). Room 101 is generated from the DXF (below); other rooms are hand-edited. Edit and reload the app; no rebuild needed. |
 | `hub/static/` | Built app, committed so the hub runs without Node. |
 | `tools/mock_hub.py` | Hub with a scripted incident; every message is labeled SIMULATED. |
+| `tools/live_hub.py` | Hub on real receivers (or `--simulate-boards` / `--replay`). |
+| `hub/live_source.py`, `hub/room_engine.py` | Live data: receivers → link states (via `firmware/tools/roomsense_hub`) → room states. |
+| `tools/dxf_to_floorplan.py` | Builds Room 101 in the floor plan from `floor plans/conference_room.dxf`. |
 
 ## Run it on the laptop (no phone, no certs)
 
@@ -26,6 +29,39 @@ hub/.venv/Scripts/python tools/mock_hub.py --host 127.0.0.1 --port 8443
 Open `http://127.0.0.1:8443`. The laptop gets a token automatically and shows the presenter controls: **Trigger alarm (demo)**, **End incident…**, **Pair a phone**, **Revoke phones…**. Use `--speed 4` to run the scripted incident four times faster.
 
 First-time Python setup: `python -m venv hub/.venv && hub/.venv/Scripts/python -m pip install -r hub/requirements.txt`
+
+## Run it on real boards
+
+Uses the six-board, one-room setup from `firmware/README.md` ("Motion location map"): TX1 and TX2 in opposite corners, RX1–RX4 on the walls. Flash and configure the boards as described there; keep the names **TX1, TX2, RX1–RX4**, because the floor plan matches receivers to Room 101 by name. A board's `room_id` setting doesn't matter (a mismatch is logged once).
+
+1. Plug the four receivers into the laptop (powered USB hub) and find their ports with `firmware\tools\.venv\Scripts\rs-setup.exe ports`. Close `rs-view` and any serial monitor first; only one program can hold a port.
+2. Start the hub on the receivers:
+   ```powershell
+   hub/.venv/Scripts/python tools/live_hub.py --port COM8 --port COM9 --port COM10 --port COM11 --hold-s 60
+   ```
+   - `--hold-s` is how long a room stays POSSIBLE after motion stops. The spec says 300 s; 60 s keeps a demo moving.
+   - Floor 2 (and Storage) stay SIMULATED and labeled so. Add `--no-sim` to show Room 101 only.
+3. **Leave the room empty for the first ~10 s** so each link learns its quiet level. Until a link has learned it, the room shows UNKNOWN · Uncalibrated.
+4. Open the dashboard as usual (laptop `https://localhost:8443`, phone over the iPhone hotspot) and trigger the alarm.
+
+No boards yet? `tools/live_hub.py --simulate-boards` runs the same pipeline on simulated receivers (a person walking loops around the room), and `--replay firmware/tools/tests/fixtures/sample_capture.log` replays a real capture.
+
+How a room's state is decided (`hub/room_engine.py`, the parent design's rules on top of the viewer's per-link MOTION/QUIET measure):
+
+- **MOTION:** any link in motion for 2 of the last 3 ticks.
+- **POSSIBLE:** motion stopped less than `--hold-s` ago, or the room hasn't been watched quietly for a full hold yet.
+- **NO DETECTION:** every link healthy and quiet for a full hold. Quiet is never treated as empty.
+- **UNKNOWN:** no usable link (no heartbeat for 10 s, no packets for 2 s, packet rate under 20/s, or a weak or flat signal). Shows the last known state and how long ago; after links come back it stays UNKNOWN for 10 s.
+- **Confidence is a heuristic** (motion margin × packet-rate quality, capped LOW when a heartbeat is late). It is not a trained model; say so in the demo.
+- Keep other heavy programs closed on the hub laptop. If packets are delayed by more than 2 s, rooms correctly drop to UNKNOWN.
+
+### Update Room 101 from the DXF
+
+```powershell
+hub/.venv/Scripts/python tools/dxf_to_floorplan.py "floor plans/conference_room.dxf" --room-id R1 --height 9ft4in --layout firmware/tools/layouts/demo-room.json --write hub/config/floorplan.json
+```
+
+The DXF is in inches with the origin at the room's inside bottom-left corner. It draws the room 114 in deep, but the measured room is 112 in (9 ft 4 in), so `--height 9ft4in` corrects it and prints a warning. Board positions come from `demo-room.json` (feet from the top-left corner); measure the real placement and update that file, then rerun.
 
 ## Run it for the iPhone
 

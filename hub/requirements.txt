@@ -13,3 +13,5 @@ httpx==0.28.1
 hypothesis==6.131.9
 # floor plan import (tools/dxf_to_floorplan.py)
 ezdxf==1.4.2
+# The serial protocol, link activity measure and board simulator (run pip from the repo root).
+-e ./firmware/tools

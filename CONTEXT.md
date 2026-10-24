@@ -170,7 +170,22 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - How raw CSI reaching the laptop squares with Privacy Rule 1, and how training recordings are handled.
 - Whether the dashboard shows a headcount or only events and room state.
 - Whether other rooms on the floor plan are simulated and labeled.
-- Phone PWA dashboard (plan: `.scratch/pwa-dashboard/plan.md`). Conflicts with the spec's "laptop screen only" and "hub binds to localhost" decisions; needs HTTPS on the hotspot, token pairing, and a spec amendment (see plan section 0, D1–D5). Decided so far: the demo phone is an **iPhone** (mkcert root CA trusted on the phone); floor plans are **hand-written JSON** in `hub/config/floorplan.json`, served by the hub at `/api/floorplan`; End incident stays on the laptop.
+
+## Decisions Log: Phone PWA dashboard (spec `.kiro/specs/pwa-dashboard`, plan `.scratch/pwa-dashboard/plan.md`)
+
+Amends the earlier "laptop screen only" and "hub binds to localhost" decisions.
+
+- **D1 Roles:** the phone PWA is the **responder view**. The laptop runs the same app as the **presenter/installer view**.
+- **D2 Network:** the hub also listens on the Windows hotspot interface (5 GHz, WPA2, `192.168.137.1`). A pairing token is required on every HTTP route and on the WebSocket.
+- **D3 Phone + TLS:** the demo phone is an **iPhone**; HTTPS via an mkcert root CA trusted on the phone.
+- **D4 Floor plan:** F1 = R1 conference room (live) + R2. The floor-2 simulated rooms were descoped for the demo.
+- **D5 Visual style:** realistic architecture only. No person figures, no smoke.
+- **Pairing:** in-app 6-digit pairing code.
+- **Floor plan source:** hand-edited `hub/config/floorplan.json`, served at `/api/floorplan`.
+- **Laptop-only controls:** End incident and the alarm trigger.
+- **Build output:** `hub/static` is committed.
+- **UNKNOWN color:** `#6E6596` (deviation from the original palette, for grayscale contrast).
+- **Descoped (compact-mode scope change):** 3D renderer, crew markers, e2e tests.
 
 ## Hardware
 
@@ -222,16 +237,17 @@ Judges may score from the video, description, and images alone. **The video is t
 | Kiro feature | Our plan | Done? |
 |--------------|----------|-------|
 | Tools (IDE / CLI / Web / Crew) | At least two. E.g. CLI for firmware/build scripts, IDE for specs/hooks/dashboard. Note how they differed. | [ ] |
-| Spec-driven development | Requirements → design → tasks for the room state machine and flag logic, with the privacy rules written in as formal requirements. Keep a short "spec vs. vibe coding" comparison note. | [ ] |
-| Agent hooks | **Privacy hook:** on save/commit, reject any change that adds MAC addresses, raw CSI, identifiers, or finer-than-room detail to outbound data. Also: run host tests on save. | [ ] |
-| Steering docs | Privacy rules, the "never clear a room" framing, node pin assignments/hardware constraints, code style. | [ ] |
+| Spec-driven development | Requirements → design → tasks for the room state machine and flag logic, with the privacy rules written in as formal requirements. Keep a short "spec vs. vibe coding" comparison note. | [x] In use: `.kiro/specs/roomsense-occupancy-tool` and `.kiro/specs/pwa-dashboard` (requirements → design → tasks, executed task-by-task by subagents). |
+| Agent hooks | **Privacy hook:** on save/commit, reject any change that adds MAC addresses, raw CSI, identifiers, or finer-than-room detail to outbound data. Also: run host tests on save. | [x] In use: `.kiro/hooks` (dashboard tests on save, banned-word/MAC scan, service-worker no-runtime-cache check). |
+| Steering docs | Privacy rules, the "never clear a room" framing, node pin assignments/hardware constraints, code style. | [x] In use: `.kiro/steering/project.md` and `.kiro/steering/ui.md`. |
 | MCP | Serial monitor MCP so Kiro can read the live CSI/motion stream and help tune thresholds against real data. Possibly GitHub MCP. | [ ] |
-| Property-based testing | Hypothesis tests on the state machine, trails, packets, and privacy invariants (see Architecture §6). Written in parallel with the hardware build. | [ ] |
+| Property-based testing | Hypothesis tests on the state machine, trails, packets, and privacy invariants (see Architecture §6). Written in parallel with the hardware build. | [x] In use: fast-check (message parsing, floor-plan validator, palette, age formatting, backoff) and Hypothesis (pairing codes, rate limiter, token store, wire redaction, token enforcement on every route, laptop-only gate). |
 | Powers | Check what's installable; use any that fit. | [ ] |
 
 Running notes (add dated bullets as things happen):
 
 - <!-- e.g. "Sat 11:10 - spec generated the state-machine task list; PBT caught an EXITED-without-door bug" -->
+- Sat 2026-10-24 - Phone PWA dashboard built from the `pwa-dashboard` spec (requirements → design → tasks, executed by subagents), alongside `roomsense-occupancy-tool`. Steering in `project.md` + `ui.md`; hooks for dashboard tests on save, banned-word/MAC scan, and SW no-runtime-cache check; property tests in fast-check (dashboard) and Hypothesis (hub pairing, tokens, redaction, route enforcement, laptop-only gate).
 
 **Repo hygiene:** the Git repo root is `hackachusetts`, with `.kiro/` directly inside it. Open Kiro with `hackachusetts` as the workspace (not `Documents`) so specs, steering, and hooks land in the right `.kiro/`. The steering file `.kiro/steering/project.md` must be rewritten for this pivot; it still describes the wearable. *(Done: rewritten with the pivot.)*
 

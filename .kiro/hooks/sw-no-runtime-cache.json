@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Service worker has no runtime caching",
+  "description": "Rebuilds the dashboard when vite.config.ts changes and fails if hub/static/sw.js contains runtime caching (live readouts must never be served from cache).",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["dashboard/vite.config.ts"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "npm --prefix dashboard run build && python -c \"import re,sys; s=open('hub/static/sw.js',encoding='utf-8').read(); m=re.search(r'runtimeCaching|NetworkFirst|NetworkOnly|StaleWhileRevalidate|CacheFirst|CacheOnly',s); print('runtime caching found: '+m.group(0) if m else 'OK'); sys.exit(1 if m else 0)\""
+  }
+}

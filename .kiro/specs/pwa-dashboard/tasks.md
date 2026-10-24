@@ -352,24 +352,24 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - _Requirements: 17.3, 17.4_
     - Done when: `npm --prefix dashboard run e2e -- storage` passes
 
-- [ ] 13. Kiro artifacts, documentation, and committed build (P5)
-  - [-] 13.1 Write the UI steering file
+- [x] 13. Kiro artifacts, documentation, and committed build (P5)
+  - [x] 13.1 Write the UI steering file
     - Create `.kiro/steering/ui.md` (inclusion: fileMatch on `dashboard/**`): State_Palette with the UNKNOWN deviation note, the state encoding table, Crew_Palette, Banned_Words regex, "Search priority" and "Motion last seen" wording, no person figures, footprints, heatmaps, trails, smoke, or fire, the 56 px rule, and "client never re-ranks"
     - _Requirements: 23.4_
     - Done when: `Select-String -Path .kiro/steering/ui.md -Pattern '56'` and `-Pattern '#6E6596'` both return matches
-  - [-] 13.2 Author agent hooks
+  - [x] 13.2 Author agent hooks
     - Create `.kiro/hooks/dashboard-props-on-save.json` (PostFileSave matcher `dashboard[\\/]src[\\/].*` → `npm --prefix dashboard run test`), `.kiro/hooks/ui-banned-words.json` (PostFileSave on `dashboard[\\/]src[\\/].*` → a script `tools/scan_ui.py` that fails on Banned_Words in `scene/strings.ts` and MAC-like strings in `dashboard/src` and `hub/config`), `.kiro/hooks/sw-no-runtime-cache.json` (PostFileSave on `vite.config.ts` → `npm --prefix dashboard run build; npm --prefix dashboard run test -- privacy`); create `tools/scan_ui.py`
     - _Requirements: 9.6, 6.7, 17.1_
     - Done when: `python tools/scan_ui.py` exits 0 and `Get-ChildItem .kiro/hooks/*.json | ForEach-Object { Get-Content $_ -Raw | ConvertFrom-Json }` parses all three files
-  - [ ] 13.3 Write the README section
+  - [x] 13.3 Write the README section
     - Update `README.md` (create if missing) with: prerequisites; `npm --prefix dashboard ci` and build; `python -m pip install -r hub/requirements.txt`; `python tools/mock_hub.py`; mkcert steps from plan section 5 (install, issue cert for `192.168.137.1 localhost 127.0.0.1` into `hub/certs/`, AirDrop `rootCA.pem`, install profile, enable full trust, verify in Safari, reissue if the hotspot IP differs); Windows hotspot on 5 GHz; Add to Home Screen; pairing inside the installed app; Revoke phones; Auto-Lock to Never for iOS < 18.4; the residual security risks from the design; how to run all tests
     - _Requirements: 23.3_
     - Done when: `Select-String -Path README.md -Pattern 'mkcert'` and `-Pattern 'Revoke phones'` both return matches
-  - [ ] 13.4 Update CONTEXT.md
+  - [x] 13.4 Update CONTEXT.md
     - Record D1–D5, pairing, floor-plan JSON, laptop-only End incident and alarm trigger, committed `hub/static`, the UNKNOWN color deviation; move the PWA item out of "Still open"; add Kiro usage log rows for this spec, the steering file, the hooks, and the fast-check/Hypothesis properties
     - _Requirements: 23.5_
     - Done when: `Select-String -Path CONTEXT.md -Pattern 'D5'` returns a match
-  - [ ] 13.5 Build and commit the static output
+  - [x] 13.5 Build and commit the static output
     - Run the production build into `hub/static` and stage it with the source changes so judges can run `python tools/mock_hub.py` without Node
     - _Requirements: 23.2_
     - Done when: `npm --prefix dashboard run build; git status --porcelain hub/static` lists the built files and `python tools/mock_hub.py --check` exits 0

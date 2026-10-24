@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Dashboard property tests on save",
+  "description": "Runs the dashboard unit and property tests whenever a file under dashboard/src is saved.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["dashboard/src/**"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "npm --prefix dashboard run test"
+  }
+}

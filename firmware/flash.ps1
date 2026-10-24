@@ -11,7 +11,7 @@
   Serial port of the board, for example COM5.
 
 .PARAMETER Chip
-  esp32 (classic boards such as "ESP32 Dev Module") or esp32c3. Default esp32.
+  esp32 (classic boards such as "ESP32 Dev Module", the only chip with a prebuilt image).
   If unsure, run:  esptool --port COM5 chip-id   (it prints the chip type).
 
 .PARAMETER Baud
@@ -22,11 +22,10 @@
 
 .EXAMPLE
   .\flash.ps1 -Port COM5
-  .\flash.ps1 -Port COM7 -Chip esp32c3
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Port,
-    [ValidateSet('esp32', 'esp32c3')][string]$Chip = 'esp32',
+    [ValidateSet('esp32')][string]$Chip = 'esp32',
     [int]$Baud = 460800,
     [string]$Image,
     [switch]$Erase

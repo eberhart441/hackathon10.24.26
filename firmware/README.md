@@ -130,15 +130,11 @@ Needs ESP-IDF v6.0 (install with Espressif's `eim`, with the `mcp` feature if yo
 
 ```powershell
 cd firmware
-idf.py set-target esp32            # or esp32c3
+idf.py set-target esp32
 idf.py build
 ```
 
-For a C3 board that uses the chip's built-in USB instead of a USB-to-serial chip:
-
-```powershell
-idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.usbserial" set-target esp32c3
-```
+The boards are classic ESP32 ("ESP32 Dev Module"). The code also builds for other ESP32 chips with CSI support (`idf.py set-target <chip>`), but only the classic ESP32 has been tested.
 
 After changing the code, rebuild and refresh the committed image: `esptool --chip esp32 merge-bin -o prebuilt/roomsense-esp32.bin @flash_args` from the build folder.
 

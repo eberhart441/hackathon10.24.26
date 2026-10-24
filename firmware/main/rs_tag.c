@@ -21,7 +21,6 @@ static const char *TAG = "rs_tag";
 #define LED_ON_MS 20
 
 static const rs_config_t *s_cfg;
-static uint32_t s_sent;
 
 static void tag_task(void *arg)
 {
@@ -38,9 +37,7 @@ static void tag_task(void *arg)
     for (;;) {
         pkt.seq++;
         pkt.uptime_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        if (esp_now_send(RS_BROADCAST_MAC, (const uint8_t *)&pkt, sizeof(pkt)) == ESP_OK) {
-            __atomic_fetch_add(&s_sent, 1, __ATOMIC_RELAXED);
-        }
+        esp_now_send(RS_BROADCAST_MAC, (const uint8_t *)&pkt, sizeof(pkt));
 #if CONFIG_RS_TAG_LED_GPIO >= 0
         gpio_set_level(CONFIG_RS_TAG_LED_GPIO, 1);
         vTaskDelay(pdMS_TO_TICKS(LED_ON_MS));
@@ -75,9 +72,4 @@ void rs_tag_start(const rs_config_t *cfg)
 #endif
     xTaskCreate(tag_task, "rs_tag", 3072, NULL, 5, NULL);
     ESP_LOGI(TAG, "tag %s broadcasting about %u/s", cfg->tag_id, cfg->pps);
-}
-
-uint32_t rs_tag_take_count(void)
-{
-    return __atomic_exchange_n(&s_sent, 0, __ATOMIC_RELAXED);
 }

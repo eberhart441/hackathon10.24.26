@@ -1,6 +1,0 @@
-# Overlay for boards whose USB port is the chip's built-in USB Serial/JTAG
-# (no separate USB-to-UART chip). Build with:
-#   idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.usbserial" set-target esp32c3
-# Baud rate does not apply on this port.
-CONFIG_ESP_CONSOLE_UART_CUSTOM=n
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

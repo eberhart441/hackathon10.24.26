@@ -87,7 +87,9 @@ def loso_eval(X, y, sessions, epochs, batch_size):
         X_tr, y_tr = X[mask_train], y[mask_train]
         X_va, y_va = X[mask_val],   y[mask_val]
 
-        if len(np.unique(y_tr)) < N_CLASSES:
+        # Every class that was recorded must be in train; classes never recorded (e.g. no
+        # doorway_crossing sessions yet) cannot be, so they must not block every fold.
+        if len(np.unique(y_tr)) < len(np.unique(y)):
             print(f"  fold {fold_idx+1}/{len(unique)} held={held_out}: "
                   "not all classes in train, skipping.")
             continue

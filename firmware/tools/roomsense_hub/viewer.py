@@ -28,6 +28,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .activity import GainReference, normalize_gain
 from .locate import Layout, Locator, link_score, load_layout
 from .protocol import CsiRecord, Heartbeat, TagSummary, parse_line
 from .sequence import SequenceTracker
@@ -50,8 +51,9 @@ class NodeView:
 
     def __init__(self, node_id: str):
         self.node_id = node_id
-        self.window: deque[tuple[int, ...]] = deque(maxlen=WINDOW)
-        self.recent: deque[tuple[int, ...]] = deque(maxlen=5)
+        self.window: deque[tuple[float, ...]] = deque(maxlen=WINDOW)
+        self.recent: deque[tuple[float, ...]] = deque(maxlen=5)
+        self.gain_ref = GainReference()
         self.means: deque[float] = deque(maxlen=21)
         self.glitches = 0
         self.pending: list[list[int]] = []
@@ -67,11 +69,13 @@ class NodeView:
 
     # --- feeding -------------------------------------------------------------
     def add_csi(self, rec: CsiRecord, now: float) -> None:
-        # Single packets sometimes arrive with every subcarrier about 3x too strong (the receiver's
-        # gain setting, which the classic ESP32 does not report). A 5-packet median per subcarrier
-        # removes those one-packet spikes without hiding real, sustained motion.
-        self.recent.append(rec.amplitudes)
-        self.window.append(tuple(int(statistics.median(col)) for col in zip(*self.recent)))
+        # The receiver changes its gain on its own (the classic ESP32 does not report it), which
+        # scales every subcarrier of a packet by the same factor, sometimes for one packet (~3x),
+        # sometimes for good. Normalizing each packet to the link's fixed reference level cancels
+        # that (see activity.py); a 5-packet median per subcarrier then removes other one-packet
+        # spikes without hiding real, sustained motion.
+        self.recent.append(normalize_gain(rec.amplitudes, self.gain_ref.update(rec.amplitudes)))
+        self.window.append(tuple(statistics.median(col) for col in zip(*self.recent)))
         live = [a for a in rec.amplitudes if a]
         mean = statistics.mean(live) if live else 0.0
         if len(self.means) >= 11:
@@ -108,11 +112,11 @@ class NodeView:
         return statistics.mean(spreads) if spreads else None
 
     def mean_amplitude(self) -> float | None:
-        """Average strength of the most recent packet over subcarriers that carry signal."""
-        if not self.window:
+        """Typical raw strength of recent packets over subcarriers that carry signal. Raw, not
+        gain-normalized: a blocked or dead link must still look weak."""
+        if not self.means:
             return None
-        live = [a for a in self.window[-1] if a]
-        return statistics.mean(live) if live else 0.0
+        return statistics.median(list(self.means)[-5:])
 
     def update_state(self, now: float) -> tuple[float | None, float | None]:
         activity = self.activity()
@@ -214,6 +218,7 @@ class Hub:
                     node.window.clear()
                     node.recent.clear()
                     node.means.clear()
+                    node.gain_ref.reset()
                     node.times.clear()
                     node.pending.clear()
 

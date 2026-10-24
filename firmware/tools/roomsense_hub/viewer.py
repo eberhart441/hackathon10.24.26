@@ -605,6 +605,9 @@ not the detection model, and &ldquo;quiet&rdquo; never means a room is empty. Wa
   <div class="tools" id="plan-tools">
     <label class="btn">Upload floor plan<input type="file" id="plan-file" accept=".dxf,image/png,image/jpeg,image/webp,image/gif" hidden></label>
     <button id="scale-btn">Set scale</button>
+    <button id="zoom-btn">Show whole plan</button>
+    <button id="truth-btn" title="While walking, click where you really are; the app compares its estimate">Accuracy test</button>
+    <span class="sub" id="truth-stats"></span>
     <span class="hint" id="plan-hint"></span>
   </div>
   <div class="planwrap">
@@ -867,12 +870,27 @@ function post(path, data, raw) {
   return fetch(path, opts).then(r => { if (!r.ok) r.text().then(t => alert('Not saved: ' + t)); return r; });
 }
 function dims() { return [PLAN.plan.width_ft, PLAN.plan.height_ft]; }
-function scale() { return (cvL.width - 2 * PAD) / dims()[0]; }
+// The part of the plan on screen: the whole plan, or (zoomed) the placed boards plus a margin.
+let ZOOM = true, VIEW = {x0: 0, y0: 0, w: 13, h: 9.33};
+function fitView() {
+  const [w, h] = dims(), ids = Object.keys(PLAN.boards);
+  if (!ZOOM || ids.length < 2) VIEW = {x0: 0, y0: 0, w, h};
+  else {
+    const xs = ids.map(id => PLAN.boards[id].x), ys = ids.map(id => PLAN.boards[id].y), m = 5;
+    const x0 = Math.max(0, Math.min(...xs) - m), y0 = Math.max(0, Math.min(...ys) - m);
+    const x1 = Math.min(w, Math.max(...xs) + m), y1 = Math.min(h, Math.max(...ys) + m);
+    VIEW = {x0, y0, w: Math.max(x1 - x0, 8), h: Math.max(y1 - y0, 6)};
+  }
+  cvL.height = Math.max(200, Math.min(1400, Math.round((cvL.width - 2 * PAD) * VIEW.h / VIEW.w) + 2 * PAD));
+  document.getElementById('zoom-btn').textContent = ZOOM ? 'Show whole plan' : 'Zoom to boards';
+}
+function scale() { return (cvL.width - 2 * PAD) / VIEW.w; }
 function toFt(ev) {
   const r = cvL.getBoundingClientRect(), s = scale();
-  return [((ev.clientX - r.left) * (cvL.width / r.width) - PAD) / s, ((ev.clientY - r.top) * (cvL.height / r.height) - PAD) / s];
+  return [VIEW.x0 + ((ev.clientX - r.left) * (cvL.width / r.width) - PAD) / s,
+          VIEW.y0 + ((ev.clientY - r.top) * (cvL.height / r.height) - PAD) / s];
 }
-function toPx(p) { const s = scale(); return [PAD + p[0] * s, PAD + p[1] * s]; }
+function toPx(p) { const s = scale(); return [PAD + (p[0] - VIEW.x0) * s, PAD + (p[1] - VIEW.y0) * s]; }
 function boardPos(id) {
   if (DRAG && DRAG.id === id) return DRAG.pos;
   const b = PLAN.boards[id]; return b ? [b.x, b.y] : null;
@@ -883,8 +901,7 @@ function setPlan(plan) {
   PLAN = plan;
   if (plan.version === PLAN_V) return;
   PLAN_V = plan.version;
-  const [w, h] = dims();
-  cvL.height = Math.max(200, Math.min(1400, Math.round((cvL.width - 2 * PAD) * h / w) + 2 * PAD));
+  fitView();
   document.getElementById('scale-btn').textContent = plan.plan.image ? 'Set scale' : 'Set area size';
   if (plan.plan.image) {
     const img = new Image();
@@ -923,6 +940,7 @@ function removeBoard(id) { post('/plan/board/remove', {id}); }
 cvL.addEventListener('pointerdown', ev => {
   if (!PLAN) return;
   const p = toFt(ev);
+  if (TRUTH.on) { markTruth(p); return; }
   if (MODE && MODE.kind === 'place') {
     post('/plan/board', {id: MODE.id, role: MODE.role, mac: MODE.mac, x: p[0], y: p[1]}); MODE = null; hint(''); return;
   }
@@ -955,6 +973,33 @@ cvL.addEventListener('pointerup', () => {
   post('/plan/board', {id: d.id, role: d.role, mac: d.mac, x: d.pos[0], y: d.pos[1]}).then(() => { if (DRAG === d) DRAG = null; });
 });
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { MODE = null; hint(''); drawPlan(); } });
+
+document.getElementById('zoom-btn').onclick = () => { ZOOM = !ZOOM; if (PLAN) { fitView(); drawPlan(); } };
+
+// ---- accuracy test: the walker clicks where they really are, the page compares with the estimate ----
+const TRUTH = {on: false, marks: []};
+document.getElementById('truth-btn').onclick = () => {
+  TRUTH.on = !TRUTH.on;
+  document.getElementById('truth-btn').className = TRUTH.on ? 'active' : '';
+  if (TRUTH.on) { TRUTH.marks = []; MODE = null; hint('Accuracy test: walk, and click where you are every few steps. Click the button again to stop.'); }
+  else hint('');
+  truthStats(); drawPlan();
+};
+function markTruth(p) {
+  const loc = LAST && LAST.location;
+  const est = loc && loc.moving ? [loc.x, loc.y] : null;
+  TRUTH.marks.push({truth: p, est, seen: !!(loc && (loc.moving || loc.motion_seen)),
+                    err: est ? Math.hypot(est[0] - p[0], est[1] - p[1]) : null});
+  truthStats(); drawPlan();
+}
+function truthStats() {
+  const m = TRUTH.marks, el = document.getElementById('truth-stats');
+  if (!m.length) { el.textContent = TRUTH.on ? 'no clicks yet' : ''; return; }
+  const errs = m.filter(x => x.err !== null).map(x => x.err).sort((a, b) => a - b);
+  const pct = k => Math.round(100 * k / m.length);
+  el.textContent = `${m.length} clicks: motion seen ${pct(m.filter(x => x.seen).length)}%, placed ${pct(errs.length)}%` +
+    (errs.length ? `, error median ${errs[Math.floor(errs.length / 2)].toFixed(1)} ft, worst ${errs[errs.length - 1].toFixed(1)} ft` : '');
+}
 
 function boardRow(key) {
   if (rows[key]) return rows[key];
@@ -1016,14 +1061,15 @@ function drawPlan() {
   const g = gL, s = scale(), [w, h] = dims();
   g.clearRect(0, 0, cvL.width, cvL.height);
   g.fillStyle = '#0b0f14'; g.fillRect(0, 0, cvL.width, cvL.height);
-  if (IMG) { g.drawImage(IMG, PAD, PAD, w * s, h * s); g.fillStyle = 'rgba(11,15,20,0.35)'; g.fillRect(PAD, PAD, w * s, h * s); }
+  const [ox, oy] = toPx([0, 0]);
+  if (IMG) { g.drawImage(IMG, ox, oy, w * s, h * s); g.fillStyle = 'rgba(11,15,20,0.35)'; g.fillRect(ox, oy, w * s, h * s); }
   else {
-    const step = Math.max(w, h) > 30 ? 5 : 1;  // 1 ft squares on a room, 5 ft on a whole floor
+    const step = Math.max(VIEW.w, VIEW.h) > 30 ? 5 : 1;  // 1 ft squares on a room, 5 ft on a whole floor
     g.strokeStyle = 'rgba(75,93,112,0.3)'; g.lineWidth = 1;
-    for (let f = step; f < w; f += step) { g.beginPath(); g.moveTo(PAD + f * s, PAD); g.lineTo(PAD + f * s, PAD + h * s); g.stroke(); }
-    for (let f = step; f < h; f += step) { g.beginPath(); g.moveTo(PAD, PAD + f * s); g.lineTo(PAD + w * s, PAD + f * s); g.stroke(); }
-    if (!(PLAN.plan.walls && PLAN.plan.walls.length)) { g.strokeStyle = '#4b5d70'; g.lineWidth = 2; g.strokeRect(PAD, PAD, w * s, h * s); }
-    g.fillStyle = '#9fb0c0'; g.font = '12px system-ui'; g.fillText(`${w.toFixed(1)} ft x ${h.toFixed(1)} ft (grid = ${step} ft)`, PAD + 6, PAD + h * s - 8);
+    for (let f = step; f < w; f += step) { g.beginPath(); g.moveTo(ox + f * s, oy); g.lineTo(ox + f * s, oy + h * s); g.stroke(); }
+    for (let f = step; f < h; f += step) { g.beginPath(); g.moveTo(ox, oy + f * s); g.lineTo(ox + w * s, oy + f * s); g.stroke(); }
+    if (!(PLAN.plan.walls && PLAN.plan.walls.length)) { g.strokeStyle = '#4b5d70'; g.lineWidth = 2; g.strokeRect(ox, oy, w * s, h * s); }
+    g.fillStyle = '#9fb0c0'; g.font = '12px system-ui'; g.fillText(`grid = ${step} ft`, PAD + 6, cvL.height - PAD - 8);
   }
   if (PLAN.plan.walls && PLAN.plan.walls.length) {
     g.strokeStyle = '#8da2b8'; g.lineWidth = 2;
@@ -1077,6 +1123,12 @@ function drawPlan() {
     g.lineWidth = 4; g.strokeStyle = '#0b0f14'; g.strokeText(label, lx, q[1] - 10);
     g.fillStyle = '#ffffff'; g.fillText(label, lx, q[1] - 10);
   }
+  TRUTH.marks.forEach(k => {  // accuracy test: green cross = where you were, line to the estimate
+    const q = toPx(k.truth);
+    if (k.est) { const e = toPx(k.est); g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(e[0], e[1]); g.stroke(); }
+    g.strokeStyle = k.est ? '#5be49b' : '#ff6b6b'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(q[0] - 6, q[1] - 6); g.lineTo(q[0] + 6, q[1] + 6); g.moveTo(q[0] + 6, q[1] - 6); g.lineTo(q[0] - 6, q[1] + 6); g.stroke();
+  });
   if (MODE && MODE.kind === 'scale') MODE.pts.forEach(p => {
     const q = toPx(p); g.fillStyle = '#ffd166'; g.beginPath(); g.arc(q[0], q[1], 6, 0, 7); g.fill();
   });

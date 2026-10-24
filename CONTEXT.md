@@ -170,6 +170,7 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - How raw CSI reaching the laptop squares with Privacy Rule 1, and how training recordings are handled.
 - Whether the dashboard shows a headcount or only events and room state.
 - Whether other rooms on the floor plan are simulated and labeled.
+- Phone PWA dashboard (plan: `.scratch/pwa-dashboard/plan.md`). Conflicts with the spec's "laptop screen only" and "hub binds to localhost" decisions; needs HTTPS on the hotspot, token pairing, and a spec amendment (see plan section 0, D1–D5). Decided so far: the demo phone is an **iPhone** (mkcert root CA trusted on the phone); floor plans are **hand-written JSON** in `hub/config/floorplan.json`, served by the hub at `/api/floorplan`; End incident stays on the laptop.
 
 ## Hardware
 

@@ -13,6 +13,7 @@ import { FloorplanError } from "./ui/FloorplanError";
 import { FloorTabs } from "./ui/FloorTabs";
 import { Header } from "./ui/Header";
 import { LaptopControls } from "./ui/LaptopControls";
+import { Pair } from "./ui/Pair";
 import { PriorityList } from "./ui/PriorityList";
 import { RoomSheet } from "./ui/RoomSheet";
 import { createWsClient } from "./ws/client";
@@ -24,18 +25,6 @@ const ROOT = {
   padding: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)",
 } as const;
 
-/** Placeholder pair screen; task 8.3 replaces the body with the keypad. */
-function PairScreen() {
-  return (
-    <main style={ROOT}>
-      <p role="note">{STRINGS.disclaimer}</p>
-      <h1>{STRINGS.pairTitle}</h1>
-      <p>{STRINGS.pairPrompt}</p>
-      {/* TODO(task 8.3): keypad + session.pairWithCode(code) */}
-    </main>
-  );
-}
-
 export function App() {
   const [sess, setSess] = useState<Session | null>(null);
   const [plan, setPlan] = useState<FloorPlan | null>(null);
@@ -45,6 +34,7 @@ export function App() {
   const [floorId, setFloorId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [triggered, setTriggered] = useState(false);
+  const [ended, setEnded] = useState(false);
 
   useEffect(() => {
     void session.start().then(setSess);
@@ -67,6 +57,7 @@ export function App() {
       (m, t) => dispatch(m, t),
       () => {
         session.clearToken();
+        setEnded(true);
         setSess({ kind: "needs_pair" });
       },
       { onDiscard: () => dispatch(null, Date.now()), onStatus: setStatus },
@@ -83,7 +74,14 @@ export function App() {
   }, [sess]);
 
   if (!sess) return <main style={ROOT}><p role="note">{STRINGS.disclaimer}</p></main>;
-  if (sess.kind === "needs_pair") return <PairScreen />;
+  if (sess.kind === "needs_pair")
+    return (
+      <Pair
+        session={session}
+        onPaired={(s) => { setEnded(false); setSess(s); }}
+        {...(ended ? { notice: STRINGS.pairSessionEnded } : {})}
+      />
+    );
   if (planErr) return <FloorplanError errors={planErr} />;
   if (!plan || !floorId) return <main style={ROOT}><p role="note">{STRINGS.disclaimer}</p></main>;
 

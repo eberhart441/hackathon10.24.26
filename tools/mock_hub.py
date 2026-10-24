@@ -33,9 +33,20 @@ def main(argv: list[str]) -> int:
             status = client.get("/").status_code
         print(f"mock hub check: GET / -> {status}")
         return 0 if status < 500 else 1
-    import uvicorn
+    import asyncio
 
-    uvicorn.run(app, host="127.0.0.1", port=8443)  # plain HTTP until task 8.1
+    from hub.web.listeners import cert_ok, local_addresses, plan_listeners, serve, url
+
+    settings = Settings.load()
+    listeners, logs = plan_listeners(settings, cert_ok(settings), local_addresses())
+    for line in logs:
+        print(line)
+    if not listeners:
+        print("No usable listen address. Check HUB_BIND_HOSTS.")
+        return 1
+    for lst in listeners:
+        print(f"Listening on {url(lst)}")
+    asyncio.run(serve(app, listeners, settings))
     return 0
 
 

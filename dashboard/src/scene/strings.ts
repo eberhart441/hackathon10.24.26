@@ -90,6 +90,7 @@ export const STRINGS = {
   pairWrongCode: "That code did not match. Check the laptop and try again.",
   pairTooManyTries: "Too many tries. Wait a minute, then enter the new code from the laptop.",
   pairSessionEnded: "This phone was signed out. Pair again with the laptop code.",
+  pairNetwork: "Could not reach the hub. Check Wi-Fi and try again.",
 
   // Floor plan errors
   floorPlanErrorTitle: "Floor plan could not be loaded",

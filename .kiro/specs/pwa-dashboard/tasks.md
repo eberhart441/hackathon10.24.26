@@ -238,7 +238,7 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
   - Done when: `npm --prefix dashboard run build; npm --prefix dashboard run test; python -m pytest hub/tests tools/tests -q` pass, and with `python tools/mock_hub.py` running, `http://127.0.0.1:8443` in a laptop browser shows the floor plan, the alarm button starts the scripted incident, and R1 is rank 1
 
 - [ ] 8. Phone pairing, HTTPS listeners, and the PWA shell (P2)
-  - [-] 8.1 Implement listener planning and HTTPS serving
+  - [x] 8.1 Implement listener planning and HTTPS serving
     - Create `hub/web/listeners.py` (`plan_listeners` pure, `serve` running one uvicorn server per listener with TLS from `HUB_CERT_FILE`/`HUB_KEY_FILE`, plain HTTP on 127.0.0.1 only when the cert is missing, skip and log missing bind addresses, never `0.0.0.0`); update `tools/mock_hub.py` to use it
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
     - Done when: `python tools/mock_hub.py --check` exits 0 and, with no cert present, its log names the missing cert file
@@ -246,11 +246,11 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - Create `hub/tests/test_listeners.py`: cert present/missing, bind address missing, no `0.0.0.0`
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
     - Done when: `python -m pytest hub/tests/test_listeners.py -q` passes
-  - [-] 8.3 Implement the in-app pairing screen
+  - [x] 8.3 Implement the in-app pairing screen
     - Create `dashboard/src/ui/Pair.tsx` (6-digit on-screen keypad with 56 px keys, 401 and 429 messages, disclaimer); update `dashboard/src/app.tsx` to show it on missing or rejected token and to drop the stored token on WS close 4401
     - _Requirements: 2.8, 2.9, 10.1, 19.1_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [-] 8.4 Configure the PWA shell, manifest, icons, and fonts
+  - [x] 8.4 Configure the PWA shell, manifest, icons, and fonts
     - Update `dashboard/vite.config.ts` with VitePWA per the design (`runtimeCaching: []`, `navigateFallbackDenylist` for `/api/` and `/ws`); create team-drawn icons in `dashboard/public/icons/` (192, 512, maskable 512, `apple-touch-icon.png`) with no third-party marks; add `dashboard/public/fonts/` with Atkinson Hyperlegible woff2 and `OFL.txt`, or if the files cannot be obtained offline, use the system font stack and create `dashboard/public/fonts/TODO.md` naming the missing files (never a CDN link); update `dashboard/index.html` with `apple-touch-icon` and `theme-color`
     - _Requirements: 17.1, 17.2, 18.1, 18.2, 18.3, 18.4, 18.5_
     - Done when: `npm --prefix dashboard run build` exits 0 and `Test-Path hub/static/sw.js` and `Test-Path hub/static/manifest.webmanifest` are True
@@ -264,7 +264,7 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - **Validates: Requirements 17.3, 17.4**
     - Done when: `npm --prefix dashboard run test -- storage.prop` passes
 
-- [ ] 9. Checkpoint - Phone pairing and PWA install
+- [-] 9. Checkpoint - Phone pairing and PWA install
   - Ensure all tests pass, ask the user if questions arise.
   - Done when: all test commands from task 7 pass, `python tools/check_pins.py` exits 0, and with the mkcert cert in `hub/certs/`, `python tools/mock_hub.py` logs listeners on `127.0.0.1:8443` and `192.168.137.1:8443` with TLS
 

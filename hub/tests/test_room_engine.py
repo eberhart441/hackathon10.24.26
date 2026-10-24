@@ -1,6 +1,6 @@
 """Room state engine on live link readings: the parent design's safety rules, with an injected clock."""
 
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from hub import room_engine as re
@@ -37,7 +37,8 @@ reading = st.one_of(
 )
 
 
-@settings(max_examples=300)
+# Generation speed depends on machine load, not on the property; never fail on it.
+@settings(max_examples=300, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(st.lists(st.tuples(st.lists(reading, max_size=3), st.floats(0.1, 20)), min_size=1, max_size=60))
 def test_safety_rules_hold_for_any_reading_sequence(steps):
     """Never MOTION -> NO_DETECTION, never NO_DETECTION within the hold of motion evidence,

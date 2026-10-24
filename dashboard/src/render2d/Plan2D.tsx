@@ -4,6 +4,7 @@ import type { RoomDescriptor, SceneModel } from '../scene/model';
 import { bounds, doorViews, inradiusAt, wallSegments } from '../scene/geometry';
 import { STATE_FILL, STATE_PATTERN } from '../scene/palette';
 import { RoomLabel } from '../ui/RoomLabel';
+import { CrewIcon } from '../ui/icons';
 
 interface Props {
   plan: Floorplan;
@@ -11,6 +12,7 @@ interface Props {
   floorId: string;
   onRoomTap: (roomId: string) => void;
   snapshot?: boolean; // draw alarm_time_state instead of the live state
+  minimal?: boolean; // phone view: rank + name pills and responder markers; details live in the list
 }
 
 const PAD = 0.6;
@@ -19,7 +21,7 @@ const IDLE_FLOOR = '#1C222B';
 const pts = (poly: Vec2[]) => poly.map(([x, y]) => `${x},${y}`).join(' ');
 
 // Top-down SVG plan: the safety net renderer, the snapshot inset, and the 3D fallback (Kiro R16.1).
-export function Plan2D({ plan, model, floorId, onRoomTap, snapshot }: Props) {
+export function Plan2D({ plan, model, floorId, onRoomTap, snapshot, minimal }: Props) {
   const floor = plan.floors.find((f) => f.id === floorId) ?? plan.floors[0];
   const rooms = model.rooms.filter((r) => r.floorId === floor.id);
   const b = bounds(floor.rooms.map((r) => r.polygon));
@@ -147,12 +149,45 @@ export function Plan2D({ plan, model, floorId, onRoomTap, snapshot }: Props) {
             <div class="label-pin" style={{ left: `${x}px`, top: `${y}px` }} key={r.id}>
               {snapshot ? (
                 <span class={`snap-label st-${shownState(r) ?? 'idle'}`}>{r.occupancy?.alarmTimeLabel ?? '—'}</span>
+              ) : minimal ? (
+                <span class={`mini-label st-${r.occupancy?.state ?? 'idle'}${r.occupancy?.searched ? ' searched' : ''}`}>
+                  {r.occupancy?.rank ? <span class={`rank${r.occupancy.isTop ? ' top' : ''}`}>{r.occupancy.rank}</span> : null}
+                  {r.name}
+                </span>
               ) : (
                 <RoomLabel room={r} onTap={onRoomTap} compact={box.w < 420} />
               )}
             </div>
           );
         })}
+        {/* Responder markers sit at each room's fixed crew spot: a room, never a measured point. */}
+        {minimal
+          ? rooms.flatMap((r) =>
+              r.crew.map((c, i) => {
+                const [x, y] = toPx([r.def.crewSlot[0] + i * 0.45, r.def.crewSlot[1]]);
+                return (
+                  <div class={`crew-pin${c.hollow ? ' hollow' : ''}`} style={{ left: `${x}px`, top: `${y}px` }} key={c.tagId}>
+                    <CrewIcon hollow={c.hollow} size={26} />
+                    <span>{c.tagId}</span>
+                  </div>
+                );
+              }),
+            )
+          : null}
+        {minimal
+          ? model.crewChips
+              .filter((c) => c.floorId === floor.id && c.rooms.length)
+              .map((c) => {
+                const cs = c.rooms.map((id) => rooms.find((r) => r.id === id)?.centroid).filter(Boolean) as Vec2[];
+                if (!cs.length) return null;
+                const [x, y] = toPx([cs.reduce((s, p) => s + p[0], 0) / cs.length, cs.reduce((s, p) => s + p[1], 0) / cs.length]);
+                return (
+                  <div class="label-pin chip-pin" style={{ left: `${x}px`, top: `${y + 34}px` }} key={c.tagId}>
+                    <span class="crew-chip">{c.text}</span>
+                  </div>
+                );
+              })
+          : null}
       </div>
     </div>
   );

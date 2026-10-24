@@ -43,6 +43,10 @@ export function validateFloorplan(input: unknown): ValidationResult {
       continue;
     }
     for (const r of f.rooms as RoomDef[]) checkRoom(r, f.id, roomIds, errors);
+    const walls = (f as { walls?: unknown }).walls;
+    if (walls !== undefined && !(Array.isArray(walls) && walls.every((l) => Array.isArray(l) && l.length >= 3 && l.every(isVec)))) {
+      errors.push(`Floor "${f.id}" has a "walls" entry that is not a list of loops of at least 3 [x, y] points.`);
+    }
   }
 
   const nodeIds = new Set<string>();
@@ -91,6 +95,9 @@ function checkRoom(r: RoomDef, floorId: string, roomIds: Set<string>, errors: st
     if (!Number.isInteger(d.edge) || d.edge < 0 || d.edge >= r.polygon.length) {
       errors.push(`Room "${r.id}" door ${i + 1} is on edge ${d.edge}, but the polygon has edges 0 to ${r.polygon.length - 1}.`);
       continue;
+    }
+    if (d.swing !== undefined && d.swing !== 'in' && d.swing !== 'out' && d.swing !== 'none') {
+      errors.push(`Room "${r.id}" door ${i + 1} has swing "${d.swing}"; it must be in, out or none.`);
     }
     const len = edgeLength(r.polygon, d.edge);
     if (!isNum(d.offset) || !isNum(d.width) || d.offset < 0 || d.width <= 0 || d.offset + d.width > len + 1e-6) {

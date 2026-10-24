@@ -19,6 +19,7 @@ const OCCUPANCY_STATES = new Set(['ALARM_ACTIVE', 'TEST']);
 const ANNOTATION_TEXT: Record<string, string> = {
   responder_present: 'Motion · responder present',
   recent_motion_may_be_responder: 'recent motion may be responder',
+  no_sensors: 'No sensors in this room',
 };
 
 export interface Occupancy {
@@ -46,6 +47,7 @@ export interface CrewItem {
   tagId: string;
   hollow: boolean;
   text: string;
+  you: boolean; // the tag this phone is bound to
 }
 
 export interface RoomDescriptor {
@@ -82,6 +84,15 @@ export interface CrewChip {
   text: string;
   rooms: string[];
   floorId: string | null;
+  you: boolean;
+}
+
+// Where this phone's responder is: the room-level location of the tag the phone is bound to.
+export interface YouView {
+  tagId: string;
+  roomIds: string[]; // one room, two rooms (near / between, low confidence), or the last room heard (lost)
+  floorId: string | null;
+  lost: boolean;
 }
 
 export interface NodeView {
@@ -110,6 +121,7 @@ export interface SceneModel {
   floors: FloorView[];
   crewChips: CrewChip[];
   nodes: Record<string, NodeView>;
+  you: YouView | null; // null: no bound tag, not heard yet, or no incident (tags are only located during one)
 }
 
 export function centroid(poly: Vec2[]): Vec2 {
@@ -129,7 +141,7 @@ export function centroid(poly: Vec2[]): Vec2 {
 }
 
 // Pure: same floor plan + store + time always gives the same picture (Kiro R8.6).
-export function buildSceneModel(plan: Floorplan, store: StoreState, now: number): SceneModel {
+export function buildSceneModel(plan: Floorplan, store: StoreState, now: number, myTag: string | null = null): SceneModel {
   const rs = store.roomStates;
   const occupancyShown = !!rs && OCCUPANCY_STATES.has(rs.system_state);
   const alarm = rs?.system_state === 'ALARM_ACTIVE';
@@ -177,8 +189,9 @@ export function buildSceneModel(plan: Floorplan, store: StoreState, now: number)
   const crewByRoom = new Map<string, CrewItem[]>();
   const crewChips: CrewChip[] = [];
   if (occupancyShown && store.crew) {
-    for (const t of store.crew.tags) placeCrew(t, roomDefs, crewByRoom, crewChips);
+    for (const t of store.crew.tags) placeCrew(t, roomDefs, crewByRoom, crewChips, t.tag_id === myTag);
   }
+  const you = occupancyShown ? youView(store.crew?.tags.find((t) => t.tag_id === myTag), roomDefs) : null;
 
   const rooms: RoomDescriptor[] = [];
   for (const [id, { def, floorId }] of roomDefs) {
@@ -228,7 +241,18 @@ export function buildSceneModel(plan: Floorplan, store: StoreState, now: number)
     floors,
     crewChips,
     nodes,
+    you,
   };
+}
+
+function youView(t: CrewTag | undefined, roomDefs: Map<string, { def: RoomDef; floorId: string }>): YouView | null {
+  if (!t) return null;
+  const lost = t.marker === 'hollow' || t.location_kind === 'lost';
+  const solidRoom = t.location_kind === 'room' && t.confidence_band !== 'low';
+  const roomIds = (lost || solidRoom ? (t.room_id ? [t.room_id] : []) : t.near_rooms.length ? t.near_rooms : t.room_id ? [t.room_id] : [])
+    .filter((id) => roomDefs.has(id));
+  if (!roomIds.length) return null;
+  return { tagId: t.tag_id, roomIds, floorId: roomDefs.get(roomIds[0])!.floorId, lost };
 }
 
 // Server order is the only order (Kiro R8.2); rooms the hub did not rank keep plan order after it.
@@ -283,7 +307,7 @@ function occupancyFor(
     subLabel: shown === 'NO_DETECTION' ? 'Still needs a sweep' : null,
     stale: m.stale || hubLost,
     searched: m.searched,
-    uncalibrated: !m.calibrated,
+    uncalibrated: !m.calibrated && m.annotation !== 'no_sensors', // nothing to calibrate in a room with no sensors
     annotation: m.annotation ? ANNOTATION_TEXT[m.annotation] ?? null : null,
     alarmTimeLabel: m.alarm_time_state ? STATE_LABEL[m.alarm_time_state] : null,
     alarmTimeState: m.alarm_time_state,
@@ -323,6 +347,7 @@ function placeCrew(
   roomDefs: Map<string, { def: RoomDef; floorId: string }>,
   byRoom: Map<string, CrewItem[]>,
   chips: CrewChip[],
+  you = false,
 ) {
   const add = (roomId: string, item: CrewItem) => {
     if (!roomDefs.has(roomId)) return;
@@ -333,12 +358,12 @@ function placeCrew(
 
   if (t.marker === 'hollow' || t.location_kind === 'lost') {
     // Shown where it was last heard; never extrapolated (parent R25.7).
-    if (t.room_id) add(t.room_id, { tagId: t.tag_id, hollow: true, text: `Last heard ${nameOf(t.room_id)}, ${ageText(t.last_heard_s)} ago` });
-    else chips.push({ tagId: t.tag_id, text: `${t.tag_id} · not heard for ${ageText(t.last_heard_s)}`, rooms: [], floorId: null });
+    if (t.room_id) add(t.room_id, { tagId: t.tag_id, hollow: true, text: `Last heard ${nameOf(t.room_id)}, ${ageText(t.last_heard_s)} ago`, you });
+    else chips.push({ tagId: t.tag_id, text: `${t.tag_id} · not heard for ${ageText(t.last_heard_s)}`, rooms: [], floorId: null, you });
     return;
   }
   if (t.location_kind === 'room' && t.room_id && t.confidence_band !== 'low') {
-    add(t.room_id, { tagId: t.tag_id, hollow: false, text: `${t.tag_id} · heard ${ageText(t.last_heard_s)} ago` });
+    add(t.room_id, { tagId: t.tag_id, hollow: false, text: `${t.tag_id} · heard ${ageText(t.last_heard_s)} ago`, you });
     return;
   }
   // Low confidence never resolves to a single room (Kiro R15.2, R15.3, R15.5).
@@ -347,7 +372,7 @@ function placeCrew(
     t.location_kind === 'between' || rooms.length < 2
       ? `${t.tag_id} · Between rooms`
       : `${t.tag_id} · Near ${nameOf(rooms[0])} / ${nameOf(rooms[1])}`;
-  chips.push({ tagId: t.tag_id, text, rooms, floorId: floorOf(rooms) });
+  chips.push({ tagId: t.tag_id, text, rooms, floorId: floorOf(rooms), you });
 }
 
 function ariaFor(def: RoomDef, o: Occupancy | null): string {

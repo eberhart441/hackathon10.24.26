@@ -1,0 +1,28 @@
+{
+  "name": "roomsense-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource/atkinson-hyperlegible": "5.3.0",
+    "preact": "10.26.5",
+    "three": "0.176.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.52.0",
+    "@preact/preset-vite": "2.10.1",
+    "@types/node": "22.15.3",
+    "@types/three": "0.176.0",
+    "fast-check": "4.1.1",
+    "typescript": "5.8.3",
+    "vite": "6.3.5",
+    "vite-plugin-pwa": "1.0.0",
+    "vitest": "3.1.3"
+  }
+}

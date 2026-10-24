@@ -24,3 +24,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Hub web layer (PWA backend): local secrets, certs, venv, test caches
+hub/.env
+hub/certs/
+*.pem
+hub/config/secrets.json
+hub/.venv/
+.hypothesis/
+.pytest_cache/

@@ -207,7 +207,7 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - **Validates: Requirements 16.5**
     - Done when: `npm --prefix dashboard run test -- scene.anchor.prop` passes
 
-- [ ] 6. 2D renderer and UI chrome: the laptop safety net (P1)
+- [x] 6. 2D renderer and UI chrome: the laptop safety net (P1)
   - [x] 6.1 Implement the SVG 2D renderer
     - Create `dashboard/src/render2d/svg.tsx`: walls with door gaps, door leaves and swing arcs, furniture blocks, nodes with health dots, link lines (`tx_dead` broken red dash + fault icon; offline RX hides link and shows "!"), room fills with saturation, SVG patterns, SIMULATED overlay text, 35% opacity for searched, greyed state, HTML labels at centroids, MOTION rings and POSSIBLE glow disabled under `prefers-reduced-motion`; no person figures, footprints, heatmaps, trails, smoke, or fire
     - _Requirements: 9.2, 9.9, 11.3, 12.3, 14.3, 16.1, 16.5, 16.6, 16.7_
@@ -224,7 +224,7 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - Create `dashboard/src/ui/FloorplanError.tsx`: plain-language error list with the disclaimer, no plan drawn
     - _Requirements: 6.4, 10.1_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [-] 6.5 Implement laptop controls and wire the app
+  - [x] 6.5 Implement laptop controls and wire the app
     - Create `dashboard/src/ui/LaptopControls.tsx` (alarm trigger on IDLE landing, End incident + confirm sheet, "Pair a phone" with code and seconds left, "Revoke phones" + confirm), export `controlsFor(whoami)`; update `dashboard/src/app.tsx` and `dashboard/src/main.tsx` to run session startup, load and validate the floor plan, start the WS client, feed the Store, run `buildSceneModel` on change and on a 1 Hz tick, and render Header, FloorTabs, Renderer_2D, PriorityList, RoomSheet, Banners; safe-area insets and `100dvh`
     - _Requirements: 1.1, 1.4, 1.5, 5.3, 5.4, 5.5, 5.6, 11.7, 14.5_
     - Done when: `npm --prefix dashboard run build` exits 0, then with `python tools/mock_hub.py` running, `Invoke-WebRequest http://127.0.0.1:8443/ -UseBasicParsing` returns status 200
@@ -233,12 +233,12 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - _Requirements: 5.3, 5.5, 10.1, 11.7_
     - Done when: `npm --prefix dashboard run test -- ui.test` passes
 
-- [ ] 7. Checkpoint - 2D safety net is demo-able on the laptop
+- [x] 7. Checkpoint - 2D safety net is demo-able on the laptop
   - Ensure all tests pass, ask the user if questions arise.
   - Done when: `npm --prefix dashboard run build; npm --prefix dashboard run test; python -m pytest hub/tests tools/tests -q` pass, and with `python tools/mock_hub.py` running, `http://127.0.0.1:8443` in a laptop browser shows the floor plan, the alarm button starts the scripted incident, and R1 is rank 1
 
 - [ ] 8. Phone pairing, HTTPS listeners, and the PWA shell (P2)
-  - [ ] 8.1 Implement listener planning and HTTPS serving
+  - [-] 8.1 Implement listener planning and HTTPS serving
     - Create `hub/web/listeners.py` (`plan_listeners` pure, `serve` running one uvicorn server per listener with TLS from `HUB_CERT_FILE`/`HUB_KEY_FILE`, plain HTTP on 127.0.0.1 only when the cert is missing, skip and log missing bind addresses, never `0.0.0.0`); update `tools/mock_hub.py` to use it
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
     - Done when: `python tools/mock_hub.py --check` exits 0 and, with no cert present, its log names the missing cert file
@@ -246,11 +246,11 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - Create `hub/tests/test_listeners.py`: cert present/missing, bind address missing, no `0.0.0.0`
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
     - Done when: `python -m pytest hub/tests/test_listeners.py -q` passes
-  - [ ] 8.3 Implement the in-app pairing screen
+  - [-] 8.3 Implement the in-app pairing screen
     - Create `dashboard/src/ui/Pair.tsx` (6-digit on-screen keypad with 56 px keys, 401 and 429 messages, disclaimer); update `dashboard/src/app.tsx` to show it on missing or rejected token and to drop the stored token on WS close 4401
     - _Requirements: 2.8, 2.9, 10.1, 19.1_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [ ] 8.4 Configure the PWA shell, manifest, icons, and fonts
+  - [-] 8.4 Configure the PWA shell, manifest, icons, and fonts
     - Update `dashboard/vite.config.ts` with VitePWA per the design (`runtimeCaching: []`, `navigateFallbackDenylist` for `/api/` and `/ws`); create team-drawn icons in `dashboard/public/icons/` (192, 512, maskable 512, `apple-touch-icon.png`) with no third-party marks; add `dashboard/public/fonts/` with Atkinson Hyperlegible woff2 and `OFL.txt`, or if the files cannot be obtained offline, use the system font stack and create `dashboard/public/fonts/TODO.md` naming the missing files (never a CDN link); update `dashboard/index.html` with `apple-touch-icon` and `theme-color`
     - _Requirements: 17.1, 17.2, 18.1, 18.2, 18.3, 18.4, 18.5_
     - Done when: `npm --prefix dashboard run build` exits 0 and `Test-Path hub/static/sw.js` and `Test-Path hub/static/manifest.webmanifest` are True

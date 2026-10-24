@@ -1,6 +1,7 @@
 // Room detail sheet (Req 11.8, 19.1, 19.2).
 import type { RoomDescriptor } from "../scene/model";
 import { STRINGS } from "../scene/strings";
+import { COLORS } from "../scene/palette";
 import type { RoomEntry } from "../ws/messages";
 import { labelFor } from "../ws/messages";
 import { MarkSearched } from "./PriorityList";
@@ -19,11 +20,11 @@ export function RoomSheet({ room, entry, onClose, onMarkSearched }: Props) {
     <section
       role="dialog"
       aria-label={room.ariaLabel}
-      style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "#fff", border: "2px solid #000", padding: 12, zIndex: 10 }}
+      style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: COLORS.background, color: COLORS.text, border: "2px solid #888", padding: 12, zIndex: 10 }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>{room.name}</h2>
-        <button type="button" style={{ minWidth: 56, minHeight: 56 }} aria-label={STRINGS.close} onClick={onClose}>
+        <button type="button" style={{ minWidth: 56, minHeight: 56, background: COLORS.furniture, color: COLORS.text, border: "1px solid #888" }} aria-label={STRINGS.close} onClick={onClose}>
           ✕
         </button>
       </div>
@@ -42,7 +43,7 @@ export function RoomSheet({ room, entry, onClose, onMarkSearched }: Props) {
             <dt>{STRINGS.linkHealth}</dt>
             <dd>{LINK[entry.link_health]}</dd>
             <dd>
-              <span style={{ border: "1px solid #000", padding: "0 4px" }}>
+              <span style={{ border: `1px solid ${COLORS.text}`, padding: "0 4px" }}>
                 {entry.source === "edge" ? STRINGS.sourceEdge : STRINGS.sourceHub}
               </span>{" "}
               {STRINGS.modelVersion} {entry.model_ver ?? STRINGS.none}

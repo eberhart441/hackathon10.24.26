@@ -23,7 +23,9 @@ export function FloorTabs({ tabs, current, onSelect }: Props) {
             minHeight: 56,
             padding: "0 12px",
             fontWeight: t.floorId === current ? 700 : 400,
-            border: t.floorId === current ? "3px solid #000" : "1px solid #666",
+            border: t.floorId === current ? "3px solid #fff" : "1px solid #888",
+            background: "#2A2F38",
+            color: "#fff",
           }}
         >
           {t.name} •{t.attention} · {STRINGS.crew} {t.crew}

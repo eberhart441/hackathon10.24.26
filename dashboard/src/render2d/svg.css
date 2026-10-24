@@ -1,0 +1,6 @@
+.rs-room { cursor: pointer; }
+.rs-room:focus { outline: none; }
+.rs-room:focus-visible .rs-floor { stroke: #fff; stroke-width: 0.08; }
+.rs-motion-ring { fill: none; stroke: #FF4D2E; stroke-width: 0.06; animation: rs-pulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes rs-pulse { from { transform: scale(0.4); opacity: 0.9; } to { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rs-motion-ring { animation: none; opacity: 0.6; } }

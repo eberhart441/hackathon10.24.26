@@ -1,0 +1,38 @@
+{
+  "floors": [
+    {
+      "id": "F1",
+      "name": "Floor 1",
+      "rooms": [
+        {
+          "id": "R1",
+          "name": "Conference",
+          "polygon": [[0, 0], [3.96, 0], [3.96, 2.84], [0, 2.84]],
+          "doors": [{ "wall": 3, "offset": 0.0, "width": 0.91, "swing": "in" }],
+          "furniture": [{ "kind": "table", "rect": [1.2, 0.9, 1.8, 1.0] }],
+          "crewSlot": [0.4, 0.4],
+          "simulated": false
+        },
+        {
+          "id": "R2",
+          "name": "Storage",
+          "polygon": [[3.96, 0], [5.5, 0], [5.5, 2.84], [3.96, 2.84]],
+          "doors": [{ "wall": 1, "offset": 1.0, "width": 0.81, "swing": "in" }],
+          "furniture": [{ "kind": "shelving", "rect": [4.06, 2.34, 1.34, 0.4] }],
+          "crewSlot": [4.3, 0.4],
+          "simulated": false
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    { "id": "TX1", "role": "TX", "room": "R1", "pos": [0.61, 0.0], "h": 1.0 },
+    { "id": "RX1", "role": "RX", "room": "R1", "pos": [0.61, 2.84], "h": 1.0 },
+    { "id": "TX2", "role": "TX", "room": "R2", "pos": [4.73, 0.0], "h": 1.0 },
+    { "id": "RX2", "role": "RX", "room": "R2", "pos": [4.73, 2.84], "h": 1.0 }
+  ],
+  "links": [
+    { "tx": "TX1", "rx": "RX1" },
+    { "tx": "TX2", "rx": "RX2" }
+  ]
+}

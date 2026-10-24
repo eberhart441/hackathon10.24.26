@@ -132,12 +132,19 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - **3 ESP32 boards:** one **transmitter** that broadcasts at a steady packet rate, and **two receivers** that pick up those packets and produce CSI. Each receiver connects to the laptop by USB serial. <!-- TODO: confirm all 3 boards support CSI (ESP32 classic and S3 do) -->
 - **Laptop replaces the Raspberry Pi and touchscreen** for processing, server, and dashboard. The alarm trigger is a button on the dashboard (or a key press) instead of a Pi GPIO button.
 - **Two links** (transmitter -> receiver 1, transmitter -> receiver 2): one placed across the **doorway** (entry/exit tripwire), one covering the **room interior**.
-- **Demo room:** the team's small conference room with a single entrance. Measured floor plan: **13 ft x 9 ft 4 in** (about 3.96 m x 2.84 m, roughly 121 sq ft / 11.3 m², diagonal about 16 ft / 4.9 m). It is described as "square" but is actually a rectangle (about 1.4 : 1); draw the floor plan to these dimensions. <!-- TODO: which wall the door is on, door width, and where the table/furniture sits -->
+- **Demo room:** the team's small conference room with a single entrance. Measured floor plan: **13 ft x 9 ft 4 in** (about 3.96 m x 2.84 m, roughly 121 sq ft / 11.3 m², diagonal about 16 ft / 4.9 m). It is described as "square" but is actually a rectangle (about 1.4 : 1); draw the floor plan to these dimensions. The single door is **3 ft wide**, located **in a corner of the 9 ft 4 in (short) wall**. Ceiling height is not needed (CSI is mostly horizontal); what matters is node mounting height (see layout below). <!-- TODO: where the table/furniture sits, door swing direction, wall material -->
 - **What the data is:** CSI is amplitude (and phase) per subcarrier over time, per link. It is **not** a 3D position. With one transmitter and two receivers we get motion per link and zone-level inference (doorway, interior), not x/y/z coordinates. "Position over time" in the dashboard means **zone / room state over time**.
-- **Firefighter software (floor plans + position over time):** <!-- TODO: is this existing software or something we build? Who owns it? If it is pre-existing or third-party, check the hackathon rules on original work/IP and make sure the repo still runs without it. -->
+- **Dashboard (floor plans + position over time):** we build it ourselves during the hackathon, vibe-coded and deliberately simple. It uses floor plans the team already drew, and shows people entering and leaving a room and the room's current state. There is no dependency on any outside software.
 - **Hybrid demo:** the real room is live. Any other rooms on the floor plan are simulated by the simulator and must be **visibly labeled "SIMULATED"** on screen.
 
 **Zone logic for one room with one entrance:** a person entering shows doorway-link activity, then interior activity. Interior activity then doorway activity, then quiet, means they left. Interior activity that stops with no later doorway event means **FLAG: motion stopped, no exit detected -> search first.** Direction (in vs out) is inferred from the order of events across the two links, not sensed directly.
+
+**Starting node layout for this room (a first guess to validate at the hour-1.5 CSI check, not a tested design).** Call the door wall (9 ft 4 in) the "entry wall".
+- **Transmitter (TX):** on a long wall, about 2 ft in from the entry wall.
+- **Receiver 1 (doorway link):** on the opposite long wall, also about 2 ft from the entry wall. The TX -> RX1 line runs across the entry strip (about 9 ft 4 in), so anyone coming through the corner door has to cross it.
+- **Receiver 2 (interior link):** near the far corner on the opposite short wall. The TX -> RX2 line runs diagonally through the room (about 14 ft).
+- **Mounting:** put nodes on the wall or a shelf, out of the walking path so nobody bumps them. Chest height (about 3 to 4 ft) catches a standing person; a link nearer the floor (about 1 to 2 ft) is better for someone lying down. Try both during calibration.
+- Keep the doorway and interior links as separate lines, and keep antennas clear of metal, the table, and the whiteboard where possible.
 
 **Decisions and open questions for this setup**
 - Receivers should compute the motion score **on the ESP32** and send only scores to the laptop, to keep Privacy Rule 1 (raw CSI never leaves a node). Raw CSI streaming stays a dev-only debug mode. <!-- TODO: team to confirm; if the laptop gets raw CSI, change Privacy Rule 1 to say so honestly -->
@@ -145,6 +152,24 @@ The Architecture section above is the production vision. For the 8-hour demo we 
 - Receivers talk to the laptop over **USB serial**, not WiFi, so reporting doesn't use the radio that is sensing.
 - Put the transmitter on a battery pack to demo "wall power cut, still working".
 - **Calibrate in the real room at the venue with the room empty.** People, chairs, or doors moving during calibration or the demo will shift the baseline.
+
+## Decisions Log (from grilling, round 1)
+
+**Decided**
+- **Dashboard:** built by us, vibe-coded, simple UI, using our own floor plans. Tracks entering/leaving events and room state.
+- **ML model output:** per link, per short window, **motion / no motion** only. The simple variance threshold stays as the baseline and we show both.
+- **Smoke/darkness claim:** we may claim WiFi sensing is not blocked by smoke or darkness and explain the physics in the pitch. We do not claim to have tested in a fire, never fake smoke on video, and never trigger a real alarm.
+- **Accuracy:** we will run accuracy trials and report the real numbers, including any false flags.
+- **Team size:** 4 (the maximum).
+- **Regulatory/certification:** out of scope for the pitch (team decision).
+
+**Still open** (not yet answered)
+- Always-on minimal "motion last seen" mode vs. alarm-triggered only (see the design tradeoff above).
+- Stillness timer value for the demo vs. the 3-minute figure in the pitch.
+- Who owns what across the four people.
+- How raw CSI reaching the laptop squares with Privacy Rule 1, and how training recordings are handled.
+- Whether the dashboard shows a headcount or only events and room state.
+- Whether other rooms on the floor plan are simulated and labeled.
 
 ## Hardware
 
@@ -211,7 +236,7 @@ Running notes (add dated bullets as things happen):
 
 ## Team
 
-<!-- TODO: names + owners -->
+<!-- TODO: names + owners. Team size: 4 (max allowed). Known so far: one person on firmware, one buying ESP32s, one building the ML model. -->
 
 | Name | Role | Owns |
 |------|------|------|

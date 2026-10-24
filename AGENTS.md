@@ -6,7 +6,7 @@ Guidance for AI agents (Kiro and others) working in this repo. Read `CONTEXT.md`
 
 Hackachusetts hackathon entry, **Civic Action** track (theme V2, Responsive and resilient communities). A network of cheap ESP32 nodes uses WiFi CSI to detect movement through smoke and walls during a fire, follows people room by room, and flags rooms where a trail went still with no exit, so firefighters know which rooms to search first. Pipeline: ESP32 nodes -> ESP-NOW -> ESP32 gateway -> Raspberry Pi (Python, FastAPI) -> web dashboard.
 
-The earlier health-wearable plan is cancelled. The `fhir-sandbox/` folder is a leftover from it and is not part of the current project; do not extend it unless told to.
+The earlier health-wearable plan is cancelled.
 
 ## Ground rules
 

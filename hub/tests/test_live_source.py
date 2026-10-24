@@ -6,7 +6,7 @@ import random
 import re
 
 import pytest
-from roomsense_hub import CsiRecord, Heartbeat, format_record
+from roomsense_hub import CsiRecord, Heartbeat, TagSummary, format_record
 
 from hub.live_source import LiveSource
 
@@ -181,6 +181,54 @@ def test_the_floor_plan_decides_the_room_even_if_the_board_says_otherwise(plan_p
     feed.run(2, moving=("RX1",), room="ROOM1")
     assert r1(feed.frame())["state"] == "MOTION"
     assert any("floor plan puts it in R1" in m for m in caplog.messages)
+
+
+def tag_line(rx, rssi=-58.0):
+    return format_record(TagSummary(rx, "R1", "E1", 10, rssi, int(rssi) + 2))
+
+
+def test_tag_summaries_are_dropped_outside_an_incident(plan_path):
+    src = make(plan_path, with_sim=False)
+    feed = Feed(src)
+    feed.run(2)
+    src.feed_line(tag_line("RX1"), feed.t)  # IDLE: must not be located or remembered (Req 29.2)
+    alarm(src, feed)
+    feed.run(1)
+    assert feed.frame()["crew"]["tags"] == []
+
+
+def test_a_heard_tag_is_located_in_its_room_and_labels_motion(plan_path):
+    src = make(plan_path, with_sim=False)
+    feed = Feed(src)
+    feed.run(3)
+    alarm(src, feed)
+    src.feed_line(tag_line("RX1"), feed.t)
+    feed.run(2, moving=("RX2",))
+    src.feed_line(tag_line("RX2"), feed.t)
+    src.tick(feed.t)
+    f = feed.frame()
+    tag = f["crew"]["tags"][0]
+    assert (tag["tag_id"], tag["location_kind"], tag["room_id"]) == ("E1", "room", "R1")
+    assert f["crew"]["floor_crew_counts"] == {"F1": 1}
+    room = r1(f)
+    assert room["state"] == "MOTION" and room["annotation"] == "responder_present"  # label only
+
+
+def test_a_silent_tag_turns_hollow_raises_a_fault_and_is_forgotten_after_the_incident(plan_path):
+    src = make(plan_path, with_sim=False)
+    feed = Feed(src)
+    feed.run(3)
+    alarm(src, feed)
+    src.feed_line(tag_line("RX1"), feed.t)
+    feed.run(11)
+    f = feed.frame()
+    assert f["crew"]["tags"][0]["marker"] == "hollow"
+    assert f["health"]["tag_faults"][0]["tag_id"] == "E1"
+    assert "fault" in f["health"]["summary"]
+    asyncio.run(src.end_incident())
+    alarm(src, feed)
+    feed.run(1)
+    assert feed.frame()["crew"]["tags"] == []  # tag positions never outlive the incident
 
 
 def test_a_plan_without_receivers_is_refused(tmp_path):

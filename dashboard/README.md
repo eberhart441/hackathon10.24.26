@@ -44,7 +44,21 @@ Uses the six-board, one-room setup from `firmware/README.md` ("Motion location m
 3. **Leave the room empty for the first ~10 s** so each link learns its quiet level. Until a link has learned it, the room shows UNKNOWN · Uncalibrated.
 4. Open the dashboard as usual (laptop `https://localhost:8443`, phone over the iPhone hotspot) and trigger the alarm.
 
-No boards yet? `tools/live_hub.py --simulate-boards` runs the same pipeline on simulated receivers (a person walking loops around the room), and `--replay firmware/tools/tests/fixtures/sample_capture.log` replays a real capture.
+No boards yet? `tools/live_hub.py --simulate-boards` runs the same pipeline on simulated receivers (a person walking loops around the room), and `--replay firmware/tools/tests/fixtures/sample_capture.log` replays a real capture. Add `--simulate-tag` for a responder tag E1 standing in Room 101.
+
+### The phone view
+
+The iPhone (any device that isn't the hub laptop) gets a simple responder view; the laptop keeps the full presenter view. Open `https://localhost:8443/?view=phone` on the laptop to see the phone view there.
+
+- **Header:** recording state, fault count, the disclaimer, and the HUB LOST banner when needed.
+- **Responders:** one line per tag, e.g. "E1 in Room 101 · heard 0:02 ago", "E1 near Room 101 / Storage", or "E1 not heard for 0:40 · last in Room 101".
+- **Floor tabs** with the number of rooms to search and crew on each floor.
+- **2D plan:** room colors and patterns by state, priority badges, the responder marker at the room's crew spot (a room, never a measured position).
+- **Rooms on that floor in search-priority order:** state, confidence, how long in that state, time since motion, and a strip of the last 5 minutes of states. The strip lives in the phone's memory only and is cleared when the incident ends.
+
+There is nothing to tap except floors. Marking rooms searched and the room sheets stay on the laptop.
+
+**Responder tags:** flash a board with `role=tag tag_id=E1` (see `firmware/README.md`) and add `tags=E1` to every receiver. The hub locates the tag room by room from the receivers' `TAG` lines (`hub/tag_locator.py`, the parent design's algorithm). Low confidence shows "near A / B" or "between rooms", never one room. Tags are tracked only during an incident and forgotten when it ends. With every receiver in one room, the tag can only ever be "in Room 101"; telling rooms apart needs receivers in more than one room.
 
 How a room's state is decided (`hub/room_engine.py`, the parent design's rules on top of the viewer's per-link MOTION/QUIET measure):
 

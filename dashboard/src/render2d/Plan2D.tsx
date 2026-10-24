@@ -212,6 +212,7 @@ function PhoneLabel({ room, hubLost, maxWidth }: { room: RoomDescriptor; hubLost
         {o.label}
       </span>
       {detail ? <span class="ml-detail">{detail}</span> : null}
+      {o.mlText ? <span class="ml-detail ml-ml">{o.mlText}</span> : null}
       <CrewBadges room={room} />
     </span>
   );

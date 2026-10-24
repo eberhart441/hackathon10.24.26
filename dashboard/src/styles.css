@@ -1083,3 +1083,10 @@ button {
   color: #000;
   border-color: #000;
 }
+
+/* Extra ML classification line under a room's normal text (secondary to the room state). */
+.ml-ml,
+.rl-ml {
+  font-style: italic;
+  opacity: 0.8;
+}

@@ -52,10 +52,13 @@ class _Links(LinkHub):
     def __init__(self, on_tag: Callable[[TagSummary, float], None]):
         super().__init__()
         self._on_tag = on_tag
+        self.ml = None  # optional MLClassifier: sees every line, changes nothing here
 
     def feed_line(self, line: str, now: float | None = None, port: str | None = None) -> None:
         now = time.time() if now is None else now
         super().feed_line(line, now, port)
+        if self.ml is not None:
+            self.ml.feed_line(line)
         if line.startswith("TAG,"):
             rec = parse_line(line)
             if isinstance(rec, TagSummary):
@@ -88,10 +91,14 @@ class FloorplanLinks:
 
 class LiveSource(Broadcaster):
     def __init__(self, floorplan: Path, *, hold_s: float = room_engine.HOLD_S, with_sim: bool = True,
-                 sim_speed: float = 1.0, clock: Callable[[], float] = time.time, tick_s: float = TICK_S):
+                 sim_speed: float = 1.0, clock: Callable[[], float] = time.time, tick_s: float = TICK_S,
+                 ml_model: Path | None = None):
         super().__init__()
         self.plan = FloorplanLinks.load(floorplan)
         self.links = _Links(self._on_tag)
+        if ml_model is not None:  # extra ML line under each room; the room state logic is unchanged
+            from .ml_classifier import MLClassifier
+            self.links.ml = MLClassifier(ml_model)
         self.tags = TagLocator(self.plan.live_rooms)
         self._tag_lock = threading.Lock()
         self._tag_room: dict[str, str] = {}  # tag -> room it was last located in (medium/high)
@@ -256,6 +263,8 @@ class LiveSource(Broadcaster):
             room_readings = [readings[rx] for rx in self.plan.receivers_in(room_id) if rx in readings]
             latch_after = None if self._alarm_at is None else self._alarm_at - room_engine.PRE_ALARM_S
             self._entries[room_id] = room_engine.update(track, room_readings, now, self.hold_s, latch_after)
+            if self.links.ml is not None:
+                self._entries[room_id]["ml"] = self.links.ml.room(self.plan.receivers_in(room_id))
         self._health = self._health_msg(readings, now)
         if self._alarm_at is not None:
             self._crew_msg, self._health["tag_faults"] = self._crew(now, readings)

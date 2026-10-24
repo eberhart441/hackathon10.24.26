@@ -29,6 +29,7 @@ export interface Occupancy {
   fill: string;
   confText: string;
   detailText: string | null; // "Motion last seen 0:42 ago" or the stale text
+  mlText: string | null; // "ML: motion 87%", the extra ML classification line
   subLabel: string | null;
   stale: boolean;
   searched: boolean;
@@ -267,6 +268,10 @@ function confText(m: RoomStateMsg): string {
   return `${m.confidence_band.toUpperCase()} ${Math.round(m.confidence_pct)}%`;
 }
 
+function mlText(ml: { label: string; motion_pct: number }): string {
+  return ml.label === 'motion' ? `ML: motion ${Math.round(ml.motion_pct)}%` : `ML: no motion ${100 - Math.round(ml.motion_pct)}%`;
+}
+
 function detailText(m: RoomStateMsg, nowS: number, hubLost: boolean, sinceMsg: number | null): string | null {
   if (hubLost) {
     const lk = m.state;
@@ -298,6 +303,7 @@ function occupancyFor(
     fill,
     confText: confText(m),
     detailText: detailText(m, nowS, hubLost, sinceMsg),
+    mlText: hubLost || !m.ml ? null : mlText(m.ml),
     subLabel: shown === 'NO_DETECTION' ? 'Still needs a sweep' : null,
     stale: m.stale || hubLost,
     searched: m.searched,
@@ -321,6 +327,7 @@ function noDataOccupancy(): Occupancy {
     fill: STATE_FILL.UNKNOWN,
     confText: 'LOW 0%',
     detailText: 'No data from hub',
+    mlText: null,
     subLabel: null,
     stale: true,
     searched: false,

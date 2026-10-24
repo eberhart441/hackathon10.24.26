@@ -39,6 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--hold-s", type=float, default=room_engine.HOLD_S,
                    help="seconds a room stays POSSIBLE after motion stops (spec: 300; shorten for demos)")
     p.add_argument("--no-sim", action="store_true", help="show only live rooms (no SIMULATED rooms)")
+    p.add_argument("--ml-model", type=Path, default=ROOT / "ml" / "model" / "baseline.json",
+                   help="baseline model from 'python -m ml.train', shown as an extra ML line under each room")
+    p.add_argument("--no-ml", action="store_true", help="do not show the ML line")
     p.add_argument("--sim-speed", type=float, default=1.0, help="speed of the simulated rooms' timeline")
     p.add_argument("--host", action="append", help="listen address (repeatable); overrides HUB_BIND_HOSTS")
     p.add_argument("--http-port", type=int, help="overrides HUB_PORT")
@@ -48,7 +51,11 @@ def main(argv: list[str] | None = None) -> int:
         p.error("give at least one --port, or --replay, or --simulate-boards")
 
     try:
-        source = LiveSource(args.floorplan, hold_s=args.hold_s, with_sim=not args.no_sim, sim_speed=args.sim_speed)
+        ml_model = None if args.no_ml or not args.ml_model.is_file() else args.ml_model
+        if ml_model is None and not args.no_ml:
+            print(f"No ML model at {args.ml_model}; run 'python -m ml.train' to show the ML line.", file=sys.stderr)
+        source = LiveSource(args.floorplan, hold_s=args.hold_s, with_sim=not args.no_sim, sim_speed=args.sim_speed,
+                            ml_model=ml_model)
     except ValueError as exc:
         print(f"Cannot start: {exc}", file=sys.stderr)
         return 2

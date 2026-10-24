@@ -64,6 +64,15 @@ Two transmitter/receiver pairs plus one tag, five boards in total:
 
 All boards must be on the same channel (default 11; `SET channel=1`, `6` or `11`). Pick the quietest of 1, 6 and 11 at the venue.
 
+## See it working (live viewer)
+
+```powershell
+cd firmware\tools
+.\.venv\Scripts\python.exe -m roomsense_hub.viewer --port COM3
+```
+
+It opens `http://127.0.0.1:8765` and shows, for each receiver, its health (from the heartbeat), packet rate and loss, a scrolling picture of the signal (subcarrier up the side, time across, brighter = stronger), and an activity line with a MOTION / QUIET badge. Walk between the two boards and the picture changes. The badge is a simple demo indicator, not the detection model; "quiet" never means a room is empty. It listens on 127.0.0.1 only and stores nothing. Close it (Ctrl+C) before flashing or recording, because it holds the serial port. `--replay tests\fixtures\sample_capture.log` shows it without hardware.
+
 ## Read the stream and record training data
 
 ```powershell

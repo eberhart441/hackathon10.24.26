@@ -11,6 +11,7 @@ dependencies = ["pyserial==3.5"]
 
 [project.scripts]
 rs-capture = "roomsense_hub.capture:main"
+rs-view = "roomsense_hub.viewer:main"
 
 [tool.setuptools]
 packages = ["roomsense_hub"]

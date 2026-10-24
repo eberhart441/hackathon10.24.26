@@ -129,13 +129,13 @@ The picture and positions are saved in `tools/site/` (git-ignored, since a real 
 
 Leave the room empty for the first ~5 seconds after starting (each link learns its quiet level; press **Reset baseline** to relearn), then walk through it. `--port COMx` reads only the ports you list; `--layout FILE` uses fixed positions from a JSON file instead of the app.
 
-## Relay mode (EXPERIMENTAL, branch `feat/relay-experimental` only)
+## Relay mode (EXPERIMENTAL, off by default)
 
 Only one board, the **gateway transmitter**, is cabled to the laptop; up to 4 receivers send their lines to it over the air (ESP-NOW) and run on any power source. The viewer reads the gateway's one port and sees the same lines as before.
 
-**Not merged to main on purpose:** it forwards raw CSI over the air, which conflicts with Privacy Rule 1 in `CONTEXT.md`, and the relay traffic shares the sensing channel (its effect on detection is not measured). See the open question there.
+**Open privacy question:** it forwards raw CSI over the air, which conflicts with Privacy Rule 1 in `CONTEXT.md`, and the relay traffic shares the sensing channel (its effect on detection is not measured). See the open question there. Boards only relay when `relay_to` is set; otherwise nothing changes.
 
-The prebuilt image on this branch is the one built from commit 8e827f8 (relay mode); the later firmware cleanup on main changed no behaviour. Rebuild from this branch's source with ESP-IDF to refresh it.
+The prebuilt image is the one built from commit 8e827f8 (relay mode); the later firmware cleanup changed no behaviour. Rebuild from source with ESP-IDF to refresh it.
 
 ```powershell
 .\flash.ps1 -Port COMx                                         # every board gets this branch's image

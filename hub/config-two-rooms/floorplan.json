@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "units": "m",
+  "_notes": "Two-room demo (relay mode): TX1 in the hallway on the laptop's USB as the relay gateway, one or more receivers per room. Meters, origin bottom-left of Room 2, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position. Board positions are approximate (about a foot).",
+  "_source": "Rooms from floor plans/walls_only.dxf (inches): two stacked 13 x 9.5 ft rooms with doors on the hallway (left) wall. Hand-entered on 2026-10-24.",
+  "floors": [
+    {
+      "id": "F1",
+      "name": "Floor 1",
+      "level": 1,
+      "rooms": [
+        {
+          "id": "R1",
+          "name": "Room 1",
+          "simulated": false,
+          "polygon": [[0, 3.008], [3.9624, 3.008], [3.9624, 5.9036], [0, 5.9036]],
+          "doors": [{"edge": 3, "offset": 2.009, "width": 0.813, "swing": "in", "hinge": "end"}],
+          "furniture": [],
+          "crewSlot": [3.5, 5.5]
+        },
+        {
+          "id": "R2",
+          "name": "Room 2",
+          "simulated": false,
+          "polygon": [[0, 0], [3.9624, 0], [3.9624, 2.8956], [0, 2.8956]],
+          "doors": [{"edge": 3, "offset": 2.009, "width": 0.813, "swing": "in", "hinge": "end"}],
+          "furniture": [],
+          "crewSlot": [3.5, 2.5]
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {"id": "TX1", "role": "TX", "room": "R2", "pos": [-0.6, 2.95], "h": 1},
+    {"id": "RX1", "role": "RX", "room": "R1", "pos": [3.85, 5.8], "h": 1},
+    {"id": "RX2", "role": "RX", "room": "R2", "pos": [3.87, 2.72], "h": 1},
+    {"id": "RX3", "role": "RX", "room": "R2", "pos": [3.83, 0.12], "h": 1}
+  ],
+  "links": [
+    {"tx": "TX1", "rx": "RX1"},
+    {"tx": "TX1", "rx": "RX2"},
+    {"tx": "TX1", "rx": "RX3"}
+  ]
+}

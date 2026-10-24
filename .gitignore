@@ -29,7 +29,7 @@ Thumbs.db
 hub/.env
 hub/certs/
 *.pem
-hub/config/secrets.json
+hub/config*/secrets.json
 hub/.venv/
 .hypothesis/
 .pytest_cache/

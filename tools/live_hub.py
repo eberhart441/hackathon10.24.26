@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         settings = replace(settings, bind_hosts=tuple(args.host))
     if args.http_port:
         settings = replace(settings, port=args.http_port)
-    run(source, settings)
+    run(source, settings, config_dir=args.floorplan.resolve().parent)  # the page shows the same plan
     return 0
 
 

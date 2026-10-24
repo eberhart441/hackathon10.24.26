@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+from pathlib import Path
 
 import uvicorn
 
@@ -55,13 +56,13 @@ def _quiet_connection_resets(loop: asyncio.AbstractEventLoop, context: dict) -> 
     loop.default_exception_handler(context)
 
 
-async def serve(source: StateSource, settings: Settings | None = None) -> None:
+async def serve(source: StateSource, settings: Settings | None = None, config_dir: Path | None = None) -> None:
     asyncio.get_running_loop().set_exception_handler(_quiet_connection_resets)
     settings = settings or Settings.load()
     hosts, tls = resolve_listeners(settings)
     if not hosts:
         raise SystemExit("No address to listen on. Check HUB_BIND_HOSTS and HUB_PORT.")
-    app = create_app(source)
+    app = create_app(source, config_dir=config_dir) if config_dir else create_app(source)
     servers = []
     for i, host in enumerate(hosts):
         config = uvicorn.Config(
@@ -79,8 +80,9 @@ async def serve(source: StateSource, settings: Settings | None = None) -> None:
     await asyncio.gather(*(s.serve() for s in servers))
 
 
-def run(source: StateSource, settings: Settings | None = None) -> None:
+def run(source: StateSource, settings: Settings | None = None, config_dir: Path | None = None) -> None:
+    """config_dir: folder with floorplan.json (and secrets.json); default hub/config."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    asyncio.run(serve(source, settings))
+    asyncio.run(serve(source, settings, config_dir))
 
 

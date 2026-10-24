@@ -1,0 +1,17 @@
+# Build output and generated config (reproduce with idf.py)
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+
+# Python tooling
+tools/.venv/
+tools/.hypothesis/
+tools/.pytest_cache/
+tools/data/
+tools/authorized_installers.txt
+tools/*.egg-info/
+__pycache__/
+
+# Prebuilt single-file flash images are committed on purpose (the repo-wide *.bin ignore does not apply here).
+!prebuilt/*.bin

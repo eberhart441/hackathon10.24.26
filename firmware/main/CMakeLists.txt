@@ -1,0 +1,25 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "rs_config.c"
+        "rs_util.c"
+        "rs_proto.c"
+        "rs_out.c"
+        "rs_radio.c"
+        "rs_console.c"
+        "rs_tx.c"
+        "rs_rx.c"
+        "rs_tag.c"
+    INCLUDE_DIRS "."
+    PRIV_REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_timer
+        esp_system
+        esp_hw_support
+        esp_driver_gpio
+        esp_driver_uart
+        esp_driver_usb_serial_jtag
+)

@@ -1,0 +1,4 @@
+# Copy this file to authorized_installers.txt (git-ignored) and list the two
+# team members authorized to record training data, one name per line.
+alice
+bob

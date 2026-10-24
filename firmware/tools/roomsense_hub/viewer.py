@@ -1018,11 +1018,12 @@ function drawPlan() {
   g.fillStyle = '#0b0f14'; g.fillRect(0, 0, cvL.width, cvL.height);
   if (IMG) { g.drawImage(IMG, PAD, PAD, w * s, h * s); g.fillStyle = 'rgba(11,15,20,0.35)'; g.fillRect(PAD, PAD, w * s, h * s); }
   else {
+    const step = Math.max(w, h) > 30 ? 5 : 1;  // 1 ft squares on a room, 5 ft on a whole floor
     g.strokeStyle = 'rgba(75,93,112,0.3)'; g.lineWidth = 1;
-    for (let f = 1; f < w; f++) { g.beginPath(); g.moveTo(PAD + f * s, PAD); g.lineTo(PAD + f * s, PAD + h * s); g.stroke(); }
-    for (let f = 1; f < h; f++) { g.beginPath(); g.moveTo(PAD, PAD + f * s); g.lineTo(PAD + w * s, PAD + f * s); g.stroke(); }
-    g.strokeStyle = '#4b5d70'; g.lineWidth = 2; g.strokeRect(PAD, PAD, w * s, h * s);
-    g.fillStyle = '#9fb0c0'; g.font = '12px system-ui'; g.fillText(`${w.toFixed(1)} ft x ${h.toFixed(1)} ft (grid = 1 ft)`, PAD + 6, PAD + h * s - 8);
+    for (let f = step; f < w; f += step) { g.beginPath(); g.moveTo(PAD + f * s, PAD); g.lineTo(PAD + f * s, PAD + h * s); g.stroke(); }
+    for (let f = step; f < h; f += step) { g.beginPath(); g.moveTo(PAD, PAD + f * s); g.lineTo(PAD + w * s, PAD + f * s); g.stroke(); }
+    if (!(PLAN.plan.walls && PLAN.plan.walls.length)) { g.strokeStyle = '#4b5d70'; g.lineWidth = 2; g.strokeRect(PAD, PAD, w * s, h * s); }
+    g.fillStyle = '#9fb0c0'; g.font = '12px system-ui'; g.fillText(`${w.toFixed(1)} ft x ${h.toFixed(1)} ft (grid = ${step} ft)`, PAD + 6, PAD + h * s - 8);
   }
   if (PLAN.plan.walls && PLAN.plan.walls.length) {
     g.strokeStyle = '#8da2b8'; g.lineWidth = 2;

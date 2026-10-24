@@ -34,6 +34,8 @@ SMOOTHING = 0.35       # share of each new estimate in the smoothed position
 TRAIL_POINTS = 60      # trail length, one point every TRAIL_EVERY ticks
 TRAIL_EVERY = 3
 MAX_SCORE = 3.0        # cap so one very noisy link cannot outvote the rest
+COVER_WEIGHT = 0.3     # a cell counts as "seen" by a link whose weight there is at least this
+MIN_LINKS = 2          # fewer working links than this through the room: motion is reported but not placed
 
 
 @dataclass(frozen=True)
@@ -47,20 +49,25 @@ class Link:
 class Layout:
     room: tuple[float, float]
     links: tuple[Link, ...]
+    # Optional floor-plan wall lines (same feet coordinates as the room, may extend outside it).
+    # Drawn on the map only; they do not change the location estimate.
+    walls: tuple[tuple[tuple[float, float], ...], ...] = ()
 
     def to_json(self) -> dict:
         return {"room": list(self.room),
-                "links": [{"rx_id": l.rx_id, "tx": list(l.tx), "rx": list(l.rx)} for l in self.links]}
+                "links": [{"rx_id": l.rx_id, "tx": list(l.tx), "rx": list(l.rx)} for l in self.links],
+                "walls": [[list(p) for p in line] for line in self.walls]}
 
 
 def load_layout(path: Path) -> Layout:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     w, h = (float(v) for v in data["room"])
+    walls = tuple(tuple((float(p[0]), float(p[1])) for p in line) for line in data.get("walls", []) if len(line) >= 2)
     links = tuple(Link(rx_id, (float(v["tx"][0]), float(v["tx"][1])), (float(v["rx"][0]), float(v["rx"][1])))
                   for rx_id, v in data["links"].items())
     if w <= 0 or h <= 0 or not links:
         raise ValueError("layout needs a positive room size and at least one link")
-    return Layout((w, h), links)
+    return Layout((w, h), links, walls)
 
 
 def link_weight(link: Link, x: float, y: float) -> float:
@@ -97,21 +104,35 @@ class Locator:
         self.centres = [((c + 0.5) * w / self.cols, (r + 0.5) * h / self.rows)
                         for r in range(self.rows) for c in range(self.cols)]
         self.weights = {l.rx_id: [link_weight(l, x, y) for x, y in self.centres] for l in layout.links}
+        # Links that actually pass through the room (a receiver parked on its transmitter in the
+        # hallway does not); only these count toward "can we place motion in the room".
+        self.room_links = {rx for rx, ws in self.weights.items() if max(ws, default=0.0) >= COVER_WEIGHT}
         self.position: tuple[float, float] | None = None
         self.trail: list[tuple[float, float]] = []
         self.ticks = 0
 
-    def update(self, scores: dict[str, float | None]) -> dict:
-        """scores: rx_id -> link_score(...). Returns what the page draws."""
+    def update(self, scores: dict[str, float | None], excluded: dict[str, str] | None = None) -> dict:
+        """scores: rx_id -> link_score(...), None for a link that cannot be judged.
+        excluded: rx_id -> plain-language reason, for links left out because the receiver is off
+        (offline, losing packets, glitching...). Returns what the page draws."""
         self.ticks += 1
+        excluded = dict(excluded or {})
+        for rx_id in self.weights:
+            if scores.get(rx_id) is None and rx_id not in excluded:
+                excluded[rx_id] = "not reporting"
+        room_links = [rx for rx in self.weights if rx in self.room_links]
+        healthy = [rx for rx in room_links if scores.get(rx) is not None and rx not in excluded]
+        # Where can we still see? A cell no working link passes near is unknown, not empty.
+        covered = [any(self.weights[rx][i] >= COVER_WEIGHT for rx in healthy) for i in range(len(self.centres))]
+
         image = [0.0] * len(self.centres)
-        active = False
+        active = []
         for rx_id, weights in self.weights.items():
             s = scores.get(rx_id)
-            if s is None:
+            if s is None or rx_id in excluded:
                 continue
             if s >= 1.0:
-                active = True
+                active.append(rx_id)
                 gain = s
             else:
                 gain = -QUIET_WEIGHT * (1.0 - s)
@@ -119,7 +140,17 @@ class Locator:
                 image[i] += gain * w
 
         estimate = spread = None
-        if active:
+        note = None
+        active_in_room = [rx for rx in active if rx in self.room_links]
+        # A left-out receiver that still shows motion is reported, never silently dropped: it may be a person.
+        suspect = sorted(rx for rx in excluded if (scores.get(rx) or 0.0) >= 1.0)
+        if active and len(healthy) < MIN_LINKS:
+            # One link alone only says "something moved near this line", not where along it.
+            note = (f"Only {len(healthy)} working link{'s' if len(healthy) != 1 else ''} cross the room, "
+                    f"so the motion cannot be placed. Disturbed: {', '.join(active)}.")
+        elif active and not active_in_room:
+            note = f"Motion near {', '.join(active)}, outside the room."
+        elif active:
             peak = max(image)
             if peak > 0:
                 cut = PEAK_FRACTION * peak
@@ -134,6 +165,9 @@ class Locator:
                         picked.append((x, y, v))
                 ex, ey = sx / total, sy / total
                 spread = max(CELL_FT, math.sqrt(sum(v * ((x - ex) ** 2 + (y - ey) ** 2) for x, y, v in picked) / total))
+                # Fewer working links = less certain where along them the person is: widen the zone.
+                if len(healthy) < len(room_links):
+                    spread *= math.sqrt(len(room_links) / len(healthy))
                 if self.position is None:
                     self.position = (ex, ey)
                 else:
@@ -145,14 +179,26 @@ class Locator:
                     del self.trail[:-TRAIL_POINTS]
 
         top = max((v for v in image), default=0.0)
+        room_off = sorted(rx for rx in excluded if rx in self.room_links)
+        if not note and room_off and estimate:
+            note = f"Less accurate: {', '.join(room_off)} left out."
+        if suspect:
+            extra = (f"{', '.join(suspect)} show{'s' if len(suspect) == 1 else ''} motion but "
+                     f"{'is' if len(suspect) == 1 else 'are'} unreliable, so it is not placed. Check that area.")
+            note = f"{note} {extra}" if note else extra
         return {
             "moving": estimate is not None,
+            "motion_seen": bool(active or suspect),
             "x": None if estimate is None else round(estimate[0], 2),
             "y": None if estimate is None else round(estimate[1], 2),
             "spread": None if spread is None else round(spread, 2),
             "last": None if self.position is None else [round(self.position[0], 2), round(self.position[1], 2)],
             "trail": [[round(x, 2), round(y, 2)] for x, y in self.trail],
             "grid": {"cols": self.cols, "rows": self.rows,
-                     "cells": [round(max(0.0, v) / top, 2) if top > 0 else 0 for v in image]},
+                     "cells": [round(max(0.0, v) / top, 2) if top > 0 else 0 for v in image],
+                     "covered": covered},
             "scores": {k: (None if v is None else round(v, 2)) for k, v in scores.items()},
+            "excluded": excluded,
+            "degraded": bool(room_off),
+            "note": note,
         }

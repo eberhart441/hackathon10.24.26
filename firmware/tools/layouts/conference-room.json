@@ -1,0 +1,195 @@
+{
+  "_comment": "Conference room from 'floor plans/walls_only.dxf' (drawn in inches): the room is 156 x 114 in = 13 x 9.5 ft. Feet from the room's top-left inside corner, y going down the page; negative x is the hallway to the left. Board positions come from the team's marked-up screenshot (1, 2 in the right-hand corners, 3 in the middle, 4 in the hallway), accurate to about a foot. TX1 stands at the same spot as RX4. Walls regenerated with: python -m roomsense_hub.dxf_walls \"floor plans/walls_only.dxf\" --origin 0 114",
+  "room": [
+    13.0,
+    9.5
+  ],
+  "links": {
+    "RX1": {
+      "tx": [
+        -8.4,
+        4.0
+      ],
+      "rx": [
+        12.5,
+        0.75
+      ]
+    },
+    "RX2": {
+      "tx": [
+        -8.4,
+        4.0
+      ],
+      "rx": [
+        12.5,
+        8.75
+      ]
+    },
+    "RX3": {
+      "tx": [
+        -8.4,
+        4.0
+      ],
+      "rx": [
+        6.5,
+        4.75
+      ]
+    },
+    "RX4": {
+      "tx": [
+        -8.4,
+        4.0
+      ],
+      "rx": [
+        -8.4,
+        4.0
+      ]
+    }
+  },
+  "walls": [
+    [
+      [
+        28.5,
+        0.0
+      ],
+      [
+        13.375,
+        0.0
+      ],
+      [
+        13.375,
+        9.5
+      ],
+      [
+        13.375,
+        9.875
+      ],
+      [
+        13.375,
+        19.75
+      ],
+      [
+        0.0,
+        19.75
+      ],
+      [
+        0.0,
+        38.875
+      ],
+      [
+        -12.25,
+        38.875
+      ],
+      [
+        -12.25,
+        -30.75
+      ],
+      [
+        28.5,
+        -30.75
+      ],
+      [
+        28.5,
+        0.0
+      ]
+    ],
+    [
+      [
+        -0.375,
+        38.5
+      ],
+      [
+        -0.375,
+        19.125
+      ],
+      [
+        0.0,
+        19.125
+      ],
+      [
+        0.0,
+        19.375
+      ],
+      [
+        13.0,
+        19.375
+      ],
+      [
+        13.0,
+        9.875
+      ],
+      [
+        0.0,
+        9.875
+      ],
+      [
+        0.0,
+        16.458
+      ],
+      [
+        -0.375,
+        16.458
+      ],
+      [
+        -0.375,
+        9.25
+      ],
+      [
+        0.0,
+        9.25
+      ],
+      [
+        0.0,
+        9.5
+      ],
+      [
+        13.0,
+        9.5
+      ],
+      [
+        13.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        6.583
+      ],
+      [
+        -0.375,
+        6.583
+      ],
+      [
+        -0.375,
+        -0.375
+      ],
+      [
+        28.125,
+        -0.375
+      ],
+      [
+        28.125,
+        -30.375
+      ],
+      [
+        -11.875,
+        -30.375
+      ],
+      [
+        -11.875,
+        -0.375
+      ],
+      [
+        -11.875,
+        38.5
+      ],
+      [
+        -0.375,
+        38.5
+      ]
+    ]
+  ]
+}

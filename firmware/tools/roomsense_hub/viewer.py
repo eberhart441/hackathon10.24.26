@@ -43,6 +43,10 @@ WEAK_RSSI_DBM = -85   # below this the link is too weak to judge
 WEAK_MEAN_AMP = 4.0   # average subcarrier strength below this is basically no signal
 WEAK_ACTIVITY = 0.2   # a real room never wobbles by exactly nothing; flat means blocked or dead
 GLITCH_FRACTION = 0.4 # a packet whose overall strength is this far from typical is counted as a glitch
+# A receiver is "obviously off" and left out of the location estimate when any of these hold.
+OFF_MIN_RATE = 40         # CSI lines/s; healthy links run at about 95 to 105
+OFF_GLITCHES_10S = 15     # glitch packets in the last 10 s; healthy links show about 3
+OFF_CLIPPED = 0.25        # share of subcarriers stuck at 255 (too close to the transmitter, or gain wrong)
 
 
 class NodeView:
@@ -54,6 +58,8 @@ class NodeView:
         self.recent: deque[tuple[int, ...]] = deque(maxlen=5)
         self.means: deque[float] = deque(maxlen=21)
         self.glitches = 0
+        self.glitch_times: deque[float] = deque(maxlen=200)
+        self.clipped = 0.0
         self.pending: list[list[int]] = []
         self.trackers: dict[str, SequenceTracker] = {}
         self.times: deque[float] = deque(maxlen=400)
@@ -78,7 +84,9 @@ class NodeView:
             typical = statistics.median(self.means)
             if typical > 0 and abs(mean - typical) > GLITCH_FRACTION * typical:
                 self.glitches += 1
+                self.glitch_times.append(now)
         self.means.append(mean)
+        self.clipped = sum(1 for a in rec.amplitudes if a >= 255) / max(1, len(rec.amplitudes))
         self.pending.append(list(rec.amplitudes))
         if len(self.pending) > 600:
             del self.pending[:-600]
@@ -138,6 +146,26 @@ class NodeView:
             self.baseline = 0.98 * self.baseline + 0.02 * activity  # learn only while quiet
         return activity, threshold
 
+    def off_reason(self, now: float, online: bool, rate: int) -> str | None:
+        """Plain-language reason this receiver should not be trusted right now, or None if it looks fine.
+        Called after update_state, so self.state is current."""
+        if not online:
+            return "offline: no heartbeat for 10 s" if self.heartbeat_t is not None else "no heartbeat yet"
+        if self.state == "nosignal":
+            return "no signal from its transmitter"
+        if self.state == "weak":
+            return "weak or blocked signal"
+        if self.state == "warming":
+            return "warming up"
+        if rate < OFF_MIN_RATE:
+            return f"losing packets ({rate}/s)"
+        recent = sum(1 for t in self.glitch_times if now - t <= 10.0)
+        if recent > OFF_GLITCHES_10S:
+            return f"glitching ({recent} bad packets in 10 s)"
+        if self.clipped > OFF_CLIPPED:
+            return "signal clipping (too close to the transmitter?)"
+        return None
+
     def snapshot(self, now: float) -> dict:
         activity, threshold = self.update_state(now)
         columns, self.pending = self.pending, []
@@ -146,11 +174,14 @@ class NodeView:
         lost = sum(t.lost for t in self.trackers.values())
         dup = sum(t.duplicates for t in self.trackers.values())
         rate = sum(1 for t in self.times if now - t <= 1.0)
+        online = hb_age is not None and hb_age <= OFFLINE_AFTER_S
+        off = self.off_reason(now, online, rate)
         return {
             "id": self.node_id,
+            "offReason": off,
             "room": hb.room_id if hb else None,
             "txMac": self.tx_mac or (hb.paired_tx_mac if hb else None),
-            "online": hb_age is not None and hb_age <= OFFLINE_AFTER_S,
+            "online": online,
             "hbAge": hb_age,
             "measuredPps": hb.measured_pps if hb else None,
             "freeHeap": hb.free_heap if hb else None,
@@ -232,14 +263,20 @@ class Hub:
             errors = dict(self.errors)
             message = {"t": now, "nodes": nodes, "errors": errors}
             if self.locator is not None:
-                scores = {}
+                scores: dict[str, float | None] = {}
+                excluded: dict[str, str] = {}
                 for link in self.layout.links:
                     node = self.nodes.get(link.rx_id)
                     snap = next((n for n in nodes if n["id"] == link.rx_id), None)
-                    scores[link.rx_id] = None if node is None or snap is None else \
-                        link_score(snap["state"], snap["activity"], node.baseline, snap["threshold"])
+                    if node is None or snap is None:
+                        scores[link.rx_id] = None
+                        excluded[link.rx_id] = "not connected"
+                        continue
+                    scores[link.rx_id] = link_score(snap["state"], snap["activity"], node.baseline, snap["threshold"])
+                    if snap["offReason"]:
+                        excluded[link.rx_id] = snap["offReason"]
                 message["layout"] = self.layout.to_json()
-                message["location"] = self.locator.update(scores)
+                message["location"] = self.locator.update(scores, excluded)
         return json.dumps(message)
 
     # --- browsers ------------------------------------------------------------
@@ -581,11 +618,26 @@ function drawTimeline(nodes) {
 
 function drawLocation(layout, loc, nodes) {
   const cv = document.getElementById('locate'), g = cv.getContext('2d');
-  const [rw, rh] = layout.room, pad = 40;
-  const S = Math.min((cv.width - 2 * pad) / rw, (cv.height - 2 * pad) / rh);
-  const X0 = (cv.width - rw * S) / 2, Y0 = (cv.height - rh * S) / 2;
+  const [rw, rh] = layout.room, pad = 30;
+  // View: the room plus every board (some may stand outside it, e.g. in a hallway), with a margin.
+  let minX = 0, minY = 0, maxX = rw, maxY = rh;
+  layout.links.forEach(l => [l.tx, l.rx].forEach(p => {
+    minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]);
+  }));
+  minX -= 1.5; minY -= 1.5; maxX += 1.5; maxY += 1.5;
+  const S = Math.min((cv.width - 2 * pad) / (maxX - minX), (cv.height - 2 * pad) / (maxY - minY));
+  const X0 = (cv.width - (maxX - minX) * S) / 2 - minX * S, Y0 = (cv.height - (maxY - minY) * S) / 2 - minY * S;
   const P = p => [X0 + p[0] * S, Y0 + p[1] * S];
   g.clearRect(0, 0, cv.width, cv.height);
+  // floor-plan walls (from the DXF), clipped to the view
+  if (layout.walls && layout.walls.length) {
+    g.save(); g.beginPath(); g.rect(X0 + minX * S, Y0 + minY * S, (maxX - minX) * S, (maxY - minY) * S); g.clip();
+    g.strokeStyle = '#3a4757'; g.lineWidth = 2;
+    layout.walls.forEach(line => {
+      g.beginPath(); line.forEach((p, i) => { const q = P(p); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.stroke();
+    });
+    g.restore();
+  }
   g.fillStyle = '#0b0f14'; g.fillRect(X0, Y0, rw * S, rh * S);
   // likelihood grid, only while something is moving
   if (loc.moving) {
@@ -597,6 +649,12 @@ function drawLocation(layout, loc, nodes) {
     });
   }
   g.strokeStyle = '#4b5d70'; g.lineWidth = 3; g.strokeRect(X0, Y0, rw * S, rh * S);
+  // areas no working link can see: shaded as unknown
+  if (loc.grid && loc.grid.covered) {
+    const {cols, rows, covered} = loc.grid, cw = rw * S / cols, ch = rh * S / rows;
+    g.fillStyle = 'rgba(140,150,165,0.22)';
+    covered.forEach((ok, i) => { if (!ok) g.fillRect(X0 + (i % cols) * cw, Y0 + Math.floor(i / cols) * ch, cw + 0.5, ch + 0.5); });
+  }
   // grid lines every foot
   g.strokeStyle = 'rgba(75,93,112,0.25)'; g.lineWidth = 1;
   for (let f = 1; f < rw; f++) { g.beginPath(); g.moveTo(X0 + f * S, Y0); g.lineTo(X0 + f * S, Y0 + rh * S); g.stroke(); }
@@ -604,15 +662,21 @@ function drawLocation(layout, loc, nodes) {
   const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
   const txs = {};
   layout.links.forEach(l => {
-    const n = byId[l.rx_id], state = n ? n.state : 'nosignal', col = STATE_COLOUR[state] || '#6b7c8f';
+    const n = byId[l.rx_id], state = n ? n.state : 'nosignal';
+    const off = loc.excluded ? loc.excluded[l.rx_id] : null;
+    const col = off ? '#6b7c8f' : (STATE_COLOUR[state] || '#6b7c8f');
     const a = P(l.tx), b = P(l.rx);
-    g.strokeStyle = col; g.lineWidth = state === 'motion' ? 5 : 2;
-    g.setLineDash(state === 'weak' || state === 'nosignal' || state === 'warming' ? [8, 6] : []);
+    g.strokeStyle = col; g.lineWidth = !off && state === 'motion' ? 5 : 2;
+    g.setLineDash(off || state === 'weak' || state === 'nosignal' || state === 'warming' ? [8, 6] : []);
     g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]);
+    // a receiver standing right next to its transmitter has no line to draw: show a ring instead
+    const sameSpot = Math.hypot(a[0] - b[0], a[1] - b[1]) < 4;
+    if (sameSpot) { g.lineWidth = state === 'motion' ? 5 : 2; g.beginPath(); g.arc(b[0], b[1], 18, 0, 7); g.stroke(); }
     g.fillStyle = col; g.beginPath(); g.arc(b[0], b[1], 9, 0, 7); g.fill();
     g.fillStyle = '#e6edf3'; g.font = '13px system-ui';
     const s = loc.scores[l.rx_id];
-    g.fillText(l.rx_id + (n ? '' : ' (not seen)') + (s === null || s === undefined ? '' : '  ' + s.toFixed(1)), b[0] + 12, b[1] - 10);
+    g.fillText(l.rx_id + (n ? '' : ' (not seen)') + (s === null || s === undefined ? '' : '  ' + s.toFixed(1)), b[0] + 12, b[1] - (sameSpot ? 22 : 10));
+    if (off) { g.fillStyle = '#ffb4a8'; g.font = '12px system-ui'; g.fillText('left out: ' + off, b[0] + 12, b[1] + (sameSpot ? 30 : 8)); }
     txs[l.tx.join(',')] = a;
   });
   Object.values(txs).forEach((a, i) => {
@@ -624,12 +688,16 @@ function drawLocation(layout, loc, nodes) {
     g.beginPath(); g.arc(q[0], q[1], 4, 0, 7); g.fill();
   });
   const badge = document.getElementById('where-badge'), text = document.getElementById('where-text');
+  const note = loc.note ? '  ' + loc.note : '';
   if (loc.moving) {
     const q = P([loc.x, loc.y]);
     g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; g.beginPath(); g.arc(q[0], q[1], loc.spread * S, 0, 7); g.stroke();
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(q[0], q[1], 9, 0, 7); g.fill();
-    badge.textContent = 'MOTION'; badge.className = 'badge b-motion';
-    text.textContent = `near x ${loc.x.toFixed(1)} ft, y ${loc.y.toFixed(1)} ft (±${loc.spread.toFixed(1)} ft)`;
+    badge.textContent = loc.degraded ? 'MOTION (LESS SURE)' : 'MOTION'; badge.className = 'badge b-motion';
+    text.textContent = `near x ${loc.x.toFixed(1)} ft, y ${loc.y.toFixed(1)} ft (±${loc.spread.toFixed(1)} ft)` + note;
+  } else if (loc.motion_seen) {
+    badge.textContent = 'MOTION (CANNOT PLACE)'; badge.className = 'badge b-motion';
+    text.textContent = (loc.note || 'Motion seen, but not enough working links to place it.');
   } else {
     if (loc.last) {
       const q = P(loc.last); g.strokeStyle = '#9fb0c0'; g.lineWidth = 2; g.setLineDash([3, 3]);

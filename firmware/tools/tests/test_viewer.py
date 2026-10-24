@@ -182,3 +182,51 @@ def test_a_sustained_disturbance_is_still_motion_with_the_glitch_filter():
     for i in range(100):
         hub.feed_line(csi_line(150 + i, [20 + rng.randint(-12, 25) for _ in range(64)]), now + i * 0.01)
     assert snapshot(hub, now + 1.0)["state"] == "motion"
+
+
+# --- the hub decides when a receiver is obviously off ------------------------------------------
+
+def _healthy_hub_with_layout(drop_rx2_after=None):
+    from roomsense_hub.locate import Layout, Link
+
+    lay = Layout((10.0, 10.0), (Link("RX1", (0, 0), (10, 10)), Link("RX2", (10, 0), (0, 10)), Link("RX3", (0, 5), (10, 5))))
+    hub = Hub(lay)
+    rng = random.Random(9)
+    for i in range(300):
+        t = i * 0.01
+        for node in ("RX1", "RX2", "RX3"):
+            if node == "RX2" and drop_rx2_after is not None and i > drop_rx2_after and i % 10:
+                continue  # RX2 loses 9 packets in 10
+            amps = [20 + rng.randint(0, 1) for _ in range(64)]
+            hub.feed_line(format_record(CsiRecord(node, TX, i, i * 10_000, -45, 11, tuple(amps))), t)
+        if i % 100 == 0:
+            for node in ("RX1", "RX2", "RX3"):
+                hub.feed_line(format_record(Heartbeat(node, "R1", TX, "0.1.0", i * 10, 100, 200000, 0, "HUB")), t)
+    return hub
+
+
+def test_healthy_receivers_are_all_used():
+    m = json.loads(_healthy_hub_with_layout().snapshot_json(3.0))
+    assert m["location"]["excluded"] == {}
+    assert all(n["offReason"] is None for n in m["nodes"])
+
+
+def test_a_receiver_losing_most_packets_is_left_out_with_a_reason():
+    m = json.loads(_healthy_hub_with_layout(drop_rx2_after=180).snapshot_json(3.0))
+    assert m["location"]["excluded"].get("RX2", "").startswith("losing packets")
+    assert {n["id"]: n["offReason"] for n in m["nodes"]}["RX1"] is None
+
+
+def test_a_receiver_without_a_heartbeat_is_left_out():
+    hub = _healthy_hub_with_layout()
+    m = json.loads(hub.snapshot_json(13.5))  # heartbeats stopped more than 10 s ago
+    assert all(r.startswith(("offline", "no signal")) for r in m["location"]["excluded"].values())
+    assert len(m["location"]["excluded"]) == 3
+
+
+def test_a_receiver_that_was_never_plugged_in_is_listed_as_not_connected():
+    from roomsense_hub.locate import Layout, Link
+
+    hub = Hub(Layout((10.0, 10.0), (Link("RX1", (0, 0), (10, 10)), Link("RX9", (10, 0), (0, 10)))))
+    m = json.loads(hub.snapshot_json(0.0))
+    assert m["location"]["excluded"]["RX9"] == "not connected"

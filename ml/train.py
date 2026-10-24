@@ -1,6 +1,6 @@
 """Train a 1-D CNN motion classifier on labeled CSI session CSVs.
 
-Reads sessions from data/manifest.csv.  You only need 'train' sessions —
+Reads sessions from firmware/tools/data/manifest.csv (written by rs-record).  You only need 'train' sessions —
 if no 'val' sessions exist the script automatically holds out one session
 per class from training for validation (auto-CV mode).  If you do have
 explicit 'val' rows in the manifest those are used instead.
@@ -10,7 +10,7 @@ Usage:
     python -m ml.train
 
     # Or point at a specific manifest / output dir:
-    python -m ml.train --manifest data/manifest.csv --out ml/model --epochs 30
+    python -m ml.train --manifest firmware/tools/data/manifest.csv --out ml/model --epochs 30
 
 The model input shape is (WINDOW_PACKETS, N_SUB) = (150, 64).
 Output is a 3-class softmax over [no_motion_seen, motion, doorway_crossing].
@@ -26,6 +26,7 @@ import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
+DATA_DIR = _ROOT / "firmware" / "tools" / "data"  # where rs-record saves sessions
 
 from ml.features import (
     INT_TO_LABEL,
@@ -135,16 +136,62 @@ def auto_split_val(manifest: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return train_rows, val_rows
 
 
+# ── Baseline ──────────────────────────────────────────────────────────────────
+
+def train_baseline(X_train, y_train, X_val, y_val, train_rows, val_rows, data_dir: Path, out_dir: Path) -> int:
+    """Fit the simple baseline, report val and leave-one-session-out accuracy, save it as JSON."""
+    from .baseline import FEATURE_NAMES, Baseline, window_features
+
+    print("Model: baseline (features: " + ", ".join(FEATURE_NAMES) + "; logistic regression)\n")
+    F_train = window_features(X_train)
+    model = Baseline.fit(F_train, y_train)
+    print(f"Train accuracy: {(model.predict(F_train) == y_train).mean():.3f}")
+    val_acc = None
+    if len(X_val) > 0:
+        val_acc = (model.predict(window_features(X_val)) == y_val).mean()
+
+    # Leave one session out: train on all other sessions, test on the left-out one. With only a
+    # few sessions this is a fairer number than a single held-out pair.
+    print("\nLeave-one-session-out (each session tested by a model that never saw it):")
+    X_all, y_all, sessions = load_sessions(pd.concat([train_rows, val_rows]), data_dir)
+    F_all, sessions = window_features(X_all), np.array(sessions)
+    correct = total = 0
+    for s in dict.fromkeys(sessions):
+        test = sessions == s
+        if len(set(y_all[~test])) < 2:
+            print(f"  {s:6s}  skipped (no other session to compare against)")
+            continue
+        m = Baseline.fit(F_all[~test], y_all[~test])
+        hit = (m.predict(F_all[test]) == y_all[test])
+        correct, total = correct + hit.sum(), total + len(hit)
+        print(f"  {s:6s}  {INT_TO_LABEL[int(y_all[test][0])]:20s}  {hit.mean():.3f}  ({hit.sum()}/{len(hit)} windows)")
+    if total:
+        print(f"  overall: {correct / total:.3f}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "baseline.json"
+    model.save(path, INT_TO_LABEL)
+    print(f"\nModel saved  → {path}")
+    if val_acc is not None:
+        print(f"Final val accuracy: {val_acc:.3f}")
+    print("\nNote: few sessions, one person, one layout. Record more (different people, paths, both rooms) "
+          "before trusting these numbers.")
+    return 0
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--manifest",   default=str(_ROOT / "data" / "manifest.csv"))
-    parser.add_argument("--data-dir",   default=str(_ROOT / "data"))
+    parser.add_argument("--manifest",   default=str(DATA_DIR / "manifest.csv"))
+    parser.add_argument("--data-dir",   default=str(DATA_DIR))
     parser.add_argument("--out",        default=str(_HERE / "model"))
     parser.add_argument("--epochs",     type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--model", choices=("baseline", "cnn"), default="baseline",
+                        help="baseline (default): 4 wobble features + logistic regression, no TensorFlow. "
+                             "cnn: the 1-D CNN, needs far more recorded sessions")
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
@@ -183,6 +230,9 @@ def main(argv=None):
     if len(X_train) == 0:
         print("error: no training data found.", file=sys.stderr)
         return 1
+
+    if args.model == "baseline":
+        return train_baseline(X_train, y_train, X_val, y_val, train_rows, val_rows, data_dir, out_dir)
 
     scaler  = fit_scaler(X_train)
     X_train = apply_scaler(X_train, scaler)

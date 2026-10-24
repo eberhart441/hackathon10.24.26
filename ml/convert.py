@@ -16,7 +16,7 @@ Usage:
 
     # INT8 quantized (recommended for MCU — needs calibration data):
     python -m ml.convert --model ml/model/csi_motion_model.keras \\
-        --manifest data/manifest.csv --quantize
+        --manifest firmware/tools/data/manifest.csv --quantize
 
 Output files (written next to the source model):
     csi_motion_model.tflite          (float32)
@@ -33,6 +33,7 @@ import numpy as np
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
+DATA_DIR = _ROOT / "firmware" / "tools" / "data"  # where rs-record saves sessions
 
 from ml.features import (
     LABEL_TO_INT,
@@ -129,8 +130,8 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model",    required=True)
     parser.add_argument("--scaler",   default="")
-    parser.add_argument("--manifest", default=str(_ROOT / "data" / "manifest.csv"))
-    parser.add_argument("--data-dir", default=str(_ROOT / "data"))
+    parser.add_argument("--manifest", default=str(DATA_DIR / "manifest.csv"))
+    parser.add_argument("--data-dir", default=str(DATA_DIR))
     parser.add_argument("--quantize", action="store_true",
                         help="produce INT8 quantized model (recommended for MCU)")
     parser.add_argument("--out-dir",  default="")

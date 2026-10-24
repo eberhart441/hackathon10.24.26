@@ -6,7 +6,7 @@ test sessions once with the final model.
 
 Usage:
     python -m ml.eval
-    python -m ml.eval --manifest data/manifest.csv --model ml/model/csi_motion_model.keras
+    python -m ml.eval --manifest firmware/tools/data/manifest.csv --model ml/model/csi_motion_model.keras
 
 If --model is omitted the script trains a fresh model on each fold (pure LOSO).
 If --model is given it evaluates that saved model on the test split only (final report mode).
@@ -22,6 +22,7 @@ import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
+DATA_DIR = _ROOT / "firmware" / "tools" / "data"  # where rs-record saves sessions
 
 from ml.features import (
     INT_TO_LABEL,
@@ -127,8 +128,8 @@ def loso_eval(X, y, sessions, epochs, batch_size):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--manifest",   default=str(_ROOT / "data" / "manifest.csv"))
-    parser.add_argument("--data-dir",   default=str(_ROOT / "data"))
+    parser.add_argument("--manifest",   default=str(DATA_DIR / "manifest.csv"))
+    parser.add_argument("--data-dir",   default=str(DATA_DIR))
     parser.add_argument("--model",      default="")
     parser.add_argument("--scaler",     default="")
     parser.add_argument("--epochs",     type=int, default=20)

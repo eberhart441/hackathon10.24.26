@@ -1,0 +1,56 @@
+menu "RoomSense"
+
+    config RS_FW_VERSION
+        string "Firmware version string"
+        default "0.1.0"
+
+    choice RS_DEFAULT_ROLE
+        prompt "Role used until the board is configured over serial"
+        default RS_DEFAULT_ROLE_RX
+        help
+            Boards remember their role, names, and channel in flash once set with
+            "CFG SET". This is only the factory default.
+
+        config RS_DEFAULT_ROLE_TX
+            bool "tx (master / TX_Node)"
+        config RS_DEFAULT_ROLE_RX
+            bool "rx (slave / RX_Node)"
+        config RS_DEFAULT_ROLE_TAG
+            bool "tag (Responder_Tag)"
+    endchoice
+
+    config RS_DEFAULT_NODE_ID
+        string "Default node ID"
+        default "NODE"
+
+    config RS_DEFAULT_ROOM_ID
+        string "Default room ID"
+        default "ROOM1"
+
+    config RS_DEFAULT_CHANNEL
+        int "Default WiFi channel (1, 6 or 11)"
+        default 11
+
+    config RS_DEFAULT_TX_PPS
+        int "Default transmitter packets per second"
+        range 1 200
+        default 100
+
+    config RS_DEFAULT_TAG_PPS
+        int "Default tag broadcasts per second"
+        range 1 50
+        default 10
+
+    config RS_TAG_LED_GPIO
+        int "Tag status LED GPIO (-1 for none)"
+        default 2
+        help
+            Blinks on every tag broadcast. GPIO2 is the on-board LED on most
+            ESP32-WROOM-32E dev boards.
+
+    config RS_OUT_QUEUE_LEN
+        int "Receiver CSI output queue length (records)"
+        range 8 128
+        default 32
+
+endmenu

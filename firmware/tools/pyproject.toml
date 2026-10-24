@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roomsense-hub"
+version = "0.1.0"
+description = "Hub-side helpers for the RoomSense node serial protocol: parser, ingest, and training-data capture"
+requires-python = ">=3.10"
+dependencies = ["pyserial==3.5"]
+
+[project.scripts]
+rs-capture = "roomsense_hub.capture:main"
+
+[tool.setuptools]
+packages = ["roomsense_hub"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

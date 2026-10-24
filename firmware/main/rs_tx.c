@@ -1,0 +1,38 @@
+#include "rs_tx.h"
+
+#include "esp_log.h"
+#include "esp_now.h"
+#include "esp_timer.h"
+
+#include "rs_radio.h"
+
+static const char *TAG = "rs_tx";
+
+static uint32_t s_seq;          /* the counter that goes in every packet */
+static uint32_t s_sent_ok;      /* packets accepted by the radio since last take */
+static esp_timer_handle_t s_timer;
+
+static void send_cb(void *arg)
+{
+    (void)arg;
+    uint32_t seq = s_seq++;
+    /* The payload is just the counter (esp-csi csi_send format). Receivers read it back
+     * at a fixed offset in the frame. */
+    if (esp_now_send(RS_BROADCAST_MAC, (const uint8_t *)&seq, sizeof(seq)) == ESP_OK) {
+        __atomic_fetch_add(&s_sent_ok, 1, __ATOMIC_RELAXED);
+    }
+}
+
+void rs_tx_start(const rs_config_t *cfg)
+{
+    ESP_ERROR_CHECK(rs_radio_add_broadcast_peer(cfg, true));
+    const esp_timer_create_args_t args = {.callback = send_cb, .name = "rs_tx"};
+    ESP_ERROR_CHECK(esp_timer_create(&args, &s_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 1000000ULL / cfg->pps));
+    ESP_LOGI(TAG, "transmitting %u packets/s", cfg->pps);
+}
+
+uint32_t rs_tx_take_count(void)
+{
+    return __atomic_exchange_n(&s_sent_ok, 0, __ATOMIC_RELAXED);
+}

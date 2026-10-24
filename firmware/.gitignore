@@ -11,6 +11,8 @@ tools/.pytest_cache/
 tools/data/
 tools/authorized_installers.txt
 tools/boards.json
+# floor plan picture and board positions saved by rs-view (a real building's plan can be sensitive)
+tools/site/
 tools/*.egg-info/
 __pycache__/
 

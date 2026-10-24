@@ -47,14 +47,15 @@ class Link:
 
 @dataclass(frozen=True)
 class Layout:
-    room: tuple[float, float]
+    room: tuple[float, float]     # size of the area searched for motion
     links: tuple[Link, ...]
+    origin: tuple[float, float] = (0.0, 0.0)  # where that area starts on the floor plan
     # Optional floor-plan wall lines (same feet coordinates as the room, may extend outside it).
     # Drawn on the map only; they do not change the location estimate.
     walls: tuple[tuple[tuple[float, float], ...], ...] = ()
 
     def to_json(self) -> dict:
-        return {"room": list(self.room),
+        return {"room": list(self.room), "origin": list(self.origin),
                 "links": [{"rx_id": l.rx_id, "tx": list(l.tx), "rx": list(l.rx)} for l in self.links],
                 "walls": [[list(p) for p in line] for line in self.walls]}
 
@@ -67,7 +68,7 @@ def load_layout(path: Path) -> Layout:
                   for rx_id, v in data["links"].items())
     if w <= 0 or h <= 0 or not links:
         raise ValueError("layout needs a positive room size and at least one link")
-    return Layout((w, h), links, walls)
+    return Layout((w, h), links, walls=walls)
 
 
 def link_weight(link: Link, x: float, y: float) -> float:
@@ -99,9 +100,10 @@ class Locator:
     def __init__(self, layout: Layout):
         self.layout = layout
         w, h = layout.room
+        ox, oy = layout.origin
         self.cols = max(1, round(w / CELL_FT))
         self.rows = max(1, round(h / CELL_FT))
-        self.centres = [((c + 0.5) * w / self.cols, (r + 0.5) * h / self.rows)
+        self.centres = [(ox + (c + 0.5) * w / self.cols, oy + (r + 0.5) * h / self.rows)
                         for r in range(self.rows) for c in range(self.cols)]
         self.weights = {l.rx_id: [link_weight(l, x, y) for x, y in self.centres] for l in layout.links}
         # Links that actually pass through the room (a receiver parked on its transmitter in the

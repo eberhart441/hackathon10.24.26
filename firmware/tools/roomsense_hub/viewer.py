@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import queue
+import re
 import statistics
 import sys
 import threading
@@ -29,6 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .activity import GainReference, normalize_gain
+from .floorplan import DEFAULT_DIR as DEFAULT_PLAN_DIR, FloorPlan, tx_label
 from .locate import Layout, Locator, link_score, load_layout
 from .protocol import CsiRecord, Heartbeat, TagSummary, parse_line
 from .sequence import SequenceTracker
@@ -48,6 +50,8 @@ GLITCH_FRACTION = 0.4 # a packet whose overall strength is this far from typical
 OFF_MIN_RATE = 40         # CSI lines/s; healthy links run at about 95 to 105
 OFF_GLITCHES_10S = 15     # glitch packets in the last 10 s; healthy links show about 3
 OFF_CLIPPED = 0.25        # share of subcarriers stuck at 255 (too close to the transmitter, or gain wrong)
+# USB-serial chips found on ESP32 boards; Bluetooth serial ports are skipped
+USB_SERIAL = re.compile(r"CP210|CH34|CH910|USB.?Serial|USB.?UART|JTAG", re.IGNORECASE)
 
 
 class NodeView:
@@ -213,10 +217,14 @@ class NodeView:
 class Hub:
     """Shared state: the nodes, the port errors, and the browsers listening."""
 
-    def __init__(self, layout: Layout | None = None) -> None:
+    def __init__(self, layout: Layout | None = None, plan: FloorPlan | None = None) -> None:
+        """layout: fixed link positions. plan: positions edited on the page (used when layout is None)."""
         self.lock = threading.Lock()
         self.layout = layout
+        self.plan = plan
         self.locator = Locator(layout) if layout else None
+        self.located_layout = layout
+        self.ports: set[str] = set()
         self.nodes: dict[str, NodeView] = {}
         self.errors: dict[str, str] = {}
         self.port_nodes: dict[str, set[str]] = {}
@@ -266,11 +274,20 @@ class Hub:
         with self.lock:
             nodes = [n.snapshot(now) for _, n in sorted(self.nodes.items())]
             errors = dict(self.errors)
-            message = {"t": now, "nodes": nodes, "errors": errors}
+            message = {"t": now, "nodes": nodes, "errors": errors, "ports": sorted(self.ports)}
+            layout = self.layout
+            if layout is None and self.plan is not None:
+                layout = self.plan.layout({nid: n.tx_mac for nid, n in self.nodes.items()})
+            if layout != self.located_layout:  # boards were moved: start a fresh estimate
+                self.locator = Locator(layout) if layout else None
+                self.located_layout = layout
+            if self.plan is not None:
+                message["plan"] = self.plan.to_json()
+                message["transmitters"] = self._transmitters(now)
             if self.locator is not None:
                 scores: dict[str, float | None] = {}
                 excluded: dict[str, str] = {}
-                for link in self.layout.links:
+                for link in layout.links:
                     node = self.nodes.get(link.rx_id)
                     snap = next((n for n in nodes if n["id"] == link.rx_id), None)
                     if node is None or snap is None:
@@ -280,9 +297,21 @@ class Hub:
                     scores[link.rx_id] = link_score(snap["state"], snap["activity"], node.baseline, snap["threshold"])
                     if snap["offReason"]:
                         excluded[link.rx_id] = snap["offReason"]
-                message["layout"] = self.layout.to_json()
+                message["layout"] = layout.to_json()
                 message["location"] = self.locator.update(scores, excluded)
         return json.dumps(message)
+
+    def _transmitters(self, now: float) -> list[dict]:
+        """Every transmitter we know of (named in boards.json or on the plan) or hear (through a receiver).
+        A transmitter has no cable to the laptop, so 'heard by' is the only sign that it is alive."""
+        names = self.plan.tx_names()
+        heard: dict[str, list[dict]] = {}
+        for nid, node in sorted(self.nodes.items()):
+            if node.tx_mac:
+                rate = sum(1 for t in node.times if now - t <= 1.0)
+                heard.setdefault(node.tx_mac, []).append({"rx": nid, "rate": rate})
+        macs = sorted(set(names) | set(heard), key=lambda m: names.get(m) or tx_label(m))
+        return [{"id": names.get(m) or tx_label(m), "mac": m, "heardBy": heard.get(m, [])} for m in macs]
 
     # --- browsers ------------------------------------------------------------
     def subscribe(self) -> "queue.Queue[str]":
@@ -328,6 +357,21 @@ def serial_reader(hub: Hub, port: str, baud: int, stop: threading.Event) -> None
             stop.wait(2.0)
 
 
+def port_scanner(hub: Hub, baud: int, stop: threading.Event) -> None:
+    """Start reading every ESP32 that is plugged in, now or later. Each receiver on USB shows up by itself."""
+    from serial.tools import list_ports
+
+    while not stop.is_set():
+        for p in list_ports.comports():
+            desc = p.description or ""
+            if p.device in hub.ports or "bluetooth" in desc.lower() or not USB_SERIAL.search(desc):
+                continue
+            with hub.lock:
+                hub.ports.add(p.device)
+            threading.Thread(target=serial_reader, args=(hub, p.device, baud, stop), daemon=True).start()
+        stop.wait(3.0)
+
+
 def replay_reader(hub: Hub, path: Path, stop: threading.Event) -> None:
     lines = path.read_text(encoding="utf-8").splitlines()
     while not stop.is_set():
@@ -349,14 +393,24 @@ def make_handler(hub: Hub):
         def log_message(self, *args) -> None:  # keep the console quiet
             pass
 
+        def _send(self, code: int, body: bytes = b"", content_type: str = "text/plain; charset=utf-8") -> None:
+            self.send_response(code)
+            if body:
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html"):
-                body = PAGE.encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
+                self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path.split("?")[0] == "/plan/image":
+                image = hub.plan.image() if hub.plan else None
+                if image is None:
+                    self.send_error(404)
+                else:
+                    self._send(200, image[0], image[1])
             elif self.path == "/events":
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -379,38 +433,90 @@ def make_handler(hub: Hub):
                 self.send_error(404)
 
         def do_POST(self) -> None:
-            if self.path == "/reset":
-                hub.reset_baselines()
-                self.send_response(204)
-                self.end_headers()
-            else:
-                self.send_error(404)
+            # Only this page may change things: a web page from elsewhere could otherwise post to localhost.
+            port = self.server.server_address[1]
+            origin = self.headers.get("Origin")
+            if origin is not None and origin not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
+                self._send(403, b"forbidden")
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > 16 * 1024 * 1024:
+                self._send(413, b"too large")
+                return
+            body = self.rfile.read(length)
+            try:
+                if self.path == "/reset":
+                    hub.reset_baselines()
+                elif hub.plan is None or not self.path.startswith("/plan/"):
+                    self.send_error(404)
+                    return
+                elif self.path == "/plan/image":
+                    content_type = self.headers.get("Content-Type", "")
+                    if "dxf" in content_type.lower():
+                        hub.plan.set_dxf(body)
+                    else:
+                        hub.plan.set_image(body, content_type)
+                else:
+                    data = json.loads(body or b"{}")
+                    if self.path == "/plan/scale":
+                        hub.plan.set_scale(float(data["width_px"]), float(data["height_px"]), float(data["ft_per_px"]),
+                                           bool(data.get("confirmed", True)))
+                    elif self.path == "/plan/size":
+                        hub.plan.set_size(float(data["width_ft"]), float(data["height_ft"]))
+                    elif self.path == "/plan/board":
+                        hub.plan.place(str(data["id"]), str(data["role"]), float(data["x"]), float(data["y"]),
+                                       data.get("mac"))
+                    elif self.path == "/plan/board/remove":
+                        hub.plan.remove(str(data["id"]))
+                    else:
+                        self.send_error(404)
+                        return
+            except (ValueError, KeyError, TypeError) as exc:
+                self._send(400, str(exc).encode("utf-8"))
+                return
+            self._send(204)
 
     return Handler
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--port", action="append", default=[], help="receiver serial port (repeat for several)")
+    p.add_argument("--port", action="append", default=[],
+                   help="receiver serial port (repeat for several). Default: every ESP32 plugged in, found automatically")
     p.add_argument("--baud", type=int, default=921600)
     p.add_argument("--replay", type=Path, help="play back a captured log instead of reading hardware")
     p.add_argument("--layout", type=Path,
-                   help="room and link positions (JSON) for the motion location map, for example layouts/demo-room.json")
+                   help="fixed link positions (JSON), instead of placing boards on the page")
+    p.add_argument("--plan-dir", type=Path, default=DEFAULT_PLAN_DIR,
+                   help="where the floor plan picture and board positions are saved (default firmware/tools/site)")
     p.add_argument("--simulate", action="store_true",
-                   help="fake receivers with a virtual walker, using --layout (default layouts/demo-room.json)")
+                   help="fake receivers with a virtual walker (positions from --layout, default layouts/demo-room.json)")
     p.add_argument("--http-port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true")
     args = p.parse_args(argv)
-    if not args.port and not args.replay and not args.simulate:
-        p.error("give at least one --port (for example --port COM3), --replay FILE, or --simulate")
-    if args.simulate and not args.layout:
-        args.layout = DEFAULT_LAYOUT
-    layout = load_layout(args.layout) if args.layout else None
 
-    hub, stop = Hub(layout), threading.Event()
+    plan = None
+    if args.simulate:
+        layout = load_layout(args.layout or DEFAULT_LAYOUT)
+        from .simulate import seed_plan
+        plan = FloorPlan(folder=None, boards_file=None)  # the simulator's boards live in memory only
+        seed_plan(layout, plan)
+        hub = Hub(plan=plan)
+    elif args.layout:
+        layout = load_layout(args.layout)
+        hub = Hub(layout)
+    else:
+        layout = None
+        plan = FloorPlan(args.plan_dir)
+        hub = Hub(plan=plan)
+
+    stop = threading.Event()
     threads = [threading.Thread(target=ticker, args=(hub, stop), daemon=True)]
     for port in args.port:
+        hub.ports.add(port)
         threads.append(threading.Thread(target=serial_reader, args=(hub, port, args.baud, stop), daemon=True))
+    if not args.port and not args.replay and not args.simulate:
+        threads.append(threading.Thread(target=port_scanner, args=(hub, args.baud, stop), daemon=True))
     if args.replay:
         threads.append(threading.Thread(target=replay_reader, args=(hub, args.replay, stop), daemon=True))
     if args.simulate:
@@ -422,6 +528,8 @@ def main(argv: list[str] | None = None) -> int:
     server = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(hub))
     url = f"http://127.0.0.1:{args.http_port}"
     print(f"RoomSense live view at {url}  (Ctrl+C to stop)")
+    if plan is not None and plan.folder is not None:
+        print(f"Floor plan and board positions are saved in {plan.folder}")
     if not args.no_browser:
         webbrowser.open(url)
     try:
@@ -463,6 +571,22 @@ PAGE = r"""<!doctype html>
   button:hover { background: #3a4a5c; }
   #errors { color: #ff8a80; margin-bottom: 12px; }
   #waiting { color: #9fb0c0; }
+  .card.wide { max-width: 1240px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+  .btn { background: #2a3644; color: #e6edf3; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { background: #3a4a5c; }
+  button.active { background: #ff9f1c; color: #1a1200; }
+  .hint { color: #ffd28a; }
+  .planwrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  #locate { flex: 1 1 560px; max-width: 900px; touch-action: none; cursor: crosshair; }
+  .side { flex: 1 1 260px; max-width: 340px; }
+  .brow { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid #2a3644; }
+  .brow .who { flex: 1; min-width: 0; }
+  .brow .who b { display: block; }
+  .brow .who span { color: #9fb0c0; font-size: 12px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .sq { width: 12px; height: 12px; background: #e6edf3; flex: none; }
+  .brow button { padding: 4px 10px; }
 </style>
 </head>
 <body>
@@ -471,11 +595,23 @@ PAGE = r"""<!doctype html>
 not the detection model, and &ldquo;quiet&rdquo; never means a room is empty. Walk between the two boards and watch the picture change.</p>
 <div id="errors"></div>
 <div id="waiting">Waiting for data from the receiver&hellip;</div>
-<div class="card" id="where" style="display:none">
-  <div class="head"><div class="title">Where is the motion?</div><span class="badge" id="where-badge"></span><span class="sub" id="where-text"></span></div>
-  <div class="label">Estimated from which links are disturbed: a zone about 1 to 2 m across, for one moving person. Orange = likely area,
-  white dot = estimate (ring = uncertainty), faded dots = recent path. Someone who stops moving drops off the map; that never means they left.</div>
-  <canvas id="locate" width="800" height="560"></canvas>
+<div class="card wide" id="where" style="display:none">
+  <div class="head"><div class="title">Floor plan</div><span class="badge" id="where-badge"></span><span class="sub" id="where-text"></span></div>
+  <div class="tools" id="plan-tools">
+    <label class="btn">Upload floor plan<input type="file" id="plan-file" accept=".dxf,image/png,image/jpeg,image/webp,image/gif" hidden></label>
+    <button id="scale-btn">Set scale</button>
+    <span class="hint" id="plan-hint"></span>
+  </div>
+  <div class="planwrap">
+    <canvas id="locate" width="900" height="600"></canvas>
+    <div class="side" id="plan-side">
+      <div class="label">Every board. <b>Place</b>, then click the plan where the board stands. Drag a board on the plan to move it.</div>
+      <div id="board-list"></div>
+    </div>
+  </div>
+  <div class="label">Where the motion is, estimated from which links (TX&ndash;RX lines) are disturbed: a zone about 1 to 2 m across, for one moving person, only
+  between placed boards. Orange = likely area, white dot = estimate (ring = uncertainty), faded dots = recent path. Someone who stops moving drops off the map;
+  that never means they left.</div>
 </div>
 <div class="card" id="overview">
   <div class="title">Room overview</div>
@@ -713,14 +849,274 @@ function drawLocation(layout, loc, nodes) {
   }
 }
 
+// ---- floor plan: picture, scale, board placement, motion estimate ----
+const cvL = document.getElementById('locate'), gL = cvL.getContext('2d');
+let PLAN = null, PLAN_V = -1, IMG = null, MODE = null, DRAG = null, LAST = null;
+const PAD = 24;  // margin so boards on the outer walls and their names stay visible
+const rows = {};
+
+function post(path, data, raw) {
+  const type = raw && (/\.dxf$/i.test(raw.name || '') ? 'application/dxf' : raw.type || 'application/octet-stream');
+  const opts = raw ? {method: 'POST', headers: {'Content-Type': type}, body: raw}
+                   : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)};
+  return fetch(path, opts).then(r => { if (!r.ok) r.text().then(t => alert('Not saved: ' + t)); return r; });
+}
+function dims() { return [PLAN.plan.width_ft, PLAN.plan.height_ft]; }
+function scale() { return (cvL.width - 2 * PAD) / dims()[0]; }
+function toFt(ev) {
+  const r = cvL.getBoundingClientRect(), s = scale();
+  return [((ev.clientX - r.left) * (cvL.width / r.width) - PAD) / s, ((ev.clientY - r.top) * (cvL.height / r.height) - PAD) / s];
+}
+function toPx(p) { const s = scale(); return [PAD + p[0] * s, PAD + p[1] * s]; }
+function boardPos(id) {
+  if (DRAG && DRAG.id === id) return DRAG.pos;
+  const b = PLAN.boards[id]; return b ? [b.x, b.y] : null;
+}
+function hint(text) { document.getElementById('plan-hint').textContent = text || ''; }
+
+function setPlan(plan) {
+  PLAN = plan;
+  if (plan.version === PLAN_V) return;
+  PLAN_V = plan.version;
+  const [w, h] = dims();
+  cvL.height = Math.max(200, Math.min(1400, Math.round((cvL.width - 2 * PAD) * h / w) + 2 * PAD));
+  document.getElementById('scale-btn').textContent = plan.plan.image ? 'Set scale' : 'Set area size';
+  if (plan.plan.image) {
+    const img = new Image();
+    img.onload = () => {
+      IMG = img;
+      if (!PLAN.plan.width_px)  // fresh upload: placeholder scale until the user measures one
+        post('/plan/scale', {width_px: img.naturalWidth, height_px: img.naturalHeight, ft_per_px: 0.05, confirmed: false});
+      drawPlan();
+    };
+    img.src = '/plan/image?v=' + plan.version;
+  } else IMG = null;
+  if (plan.plan.image && !plan.plan.scaled) hint('Set the scale: click "Set scale", then two points a known distance apart.');
+  else if (!MODE) hint('');
+}
+
+document.getElementById('plan-file').onchange = ev => {
+  const f = ev.target.files[0]; if (f) post('/plan/image', null, f); ev.target.value = '';
+};
+document.getElementById('scale-btn').onclick = () => {
+  if (!PLAN) return;
+  if (!PLAN.plan.image) {
+    const a = prompt('Size of the area in feet, width x height (for example 13 x 9.3). Add m for metres (4 x 2.8 m).');
+    const m = a && a.match(/([\d.]+)\s*[x×]\s*([\d.]+)\s*(m)?/i);
+    if (m) { const k = m[3] ? 3.28084 : 1; post('/plan/size', {width_ft: +m[1] * k, height_ft: +m[2] * k}); }
+    return;
+  }
+  if (!IMG) return;
+  MODE = {kind: 'scale', pts: []}; hint('Click the first end of a distance you know (a wall, a door). Esc cancels.');
+};
+
+function placeBoard(id, role, mac) {
+  MODE = {kind: 'place', id, role, mac}; hint('Click on the plan where ' + id + ' stands. Esc cancels.');
+}
+function removeBoard(id) { post('/plan/board/remove', {id}); }
+
+cvL.addEventListener('pointerdown', ev => {
+  if (!PLAN) return;
+  const p = toFt(ev);
+  if (MODE && MODE.kind === 'place') {
+    post('/plan/board', {id: MODE.id, role: MODE.role, mac: MODE.mac, x: p[0], y: p[1]}); MODE = null; hint(''); return;
+  }
+  if (MODE && MODE.kind === 'scale') {
+    MODE.pts.push(p);
+    if (MODE.pts.length === 1) { hint('Now click the other end.'); drawPlan(); return; }
+    const [a, b] = MODE.pts, imgPx = Math.hypot(b[0] - a[0], b[1] - a[1]) * IMG.naturalWidth / dims()[0];
+    const ans = prompt('Real distance between the two points? For example 13 ft or 4.2 m');
+    const m = ans && ans.match(/([\d.]+)\s*(m|ft)?/i);
+    MODE = null; hint('');
+    if (m && imgPx > 3) {
+      const ft = +m[1] * ((m[2] || 'ft').toLowerCase() === 'm' ? 3.28084 : 1);
+      post('/plan/scale', {width_px: IMG.naturalWidth, height_px: IMG.naturalHeight, ft_per_px: ft / imgPx, confirmed: true});
+    }
+    return;
+  }
+  const at = toPx(p);
+  for (const id of Object.keys(PLAN.boards)) {
+    const q = toPx(boardPos(id));
+    if (Math.hypot(q[0] - at[0], q[1] - at[1]) < 16) {
+      const b = PLAN.boards[id]; DRAG = {id, role: b.role, mac: b.mac, pos: [b.x, b.y]};
+      cvL.setPointerCapture(ev.pointerId); return;
+    }
+  }
+});
+cvL.addEventListener('pointermove', ev => { if (DRAG) { DRAG.pos = toFt(ev); drawPlan(); } });
+cvL.addEventListener('pointerup', () => {
+  if (!DRAG) return;
+  const d = DRAG;
+  post('/plan/board', {id: d.id, role: d.role, mac: d.mac, x: d.pos[0], y: d.pos[1]}).then(() => { if (DRAG === d) DRAG = null; });
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { MODE = null; hint(''); drawPlan(); } });
+
+function boardRow(key) {
+  if (rows[key]) return rows[key];
+  const row = el('div', 'brow'), mark = el('span'), who = el('div', 'who'), name = el('b'), status = el('span');
+  const place = el('button', null, 'Place'), del = el('button', null, '×');
+  del.title = 'Remove from the plan';
+  who.append(name, status); row.append(mark, who, place, del);
+  document.getElementById('board-list').append(row);
+  return rows[key] = {row, mark, name, status, place, del};
+}
+
+function updateBoards(m) {
+  const nodes = Object.fromEntries(m.nodes.map(n => [n.id, n]));
+  const txByMac = Object.fromEntries((m.transmitters || []).map(t => [t.mac, t]));
+  const items = [];
+  for (const t of m.transmitters || []) items.push({id: t.id, role: 'tx', mac: t.mac, tx: t});
+  for (const [id, b] of Object.entries(PLAN.boards))
+    if (b.role === 'tx' && !txByMac[b.mac]) items.push({id, role: 'tx', mac: b.mac, tx: {heardBy: []}});
+  const rxIds = new Set([...m.nodes.map(n => n.id), ...Object.entries(PLAN.boards).filter(([, b]) => b.role === 'rx').map(([id]) => id)]);
+  for (const id of [...rxIds].sort()) items.push({id, role: 'rx', node: nodes[id]});
+  const seen = new Set();
+  for (const it of items) {
+    const key = it.role + ':' + it.id; seen.add(key);
+    const r = boardRow(key), placed = !!PLAN.boards[it.id];
+    r.name.textContent = it.id + (it.role === 'tx' ? '  (transmitter)' : '  (receiver)');
+    if (it.role === 'tx') {
+      r.mark.className = 'sq';
+      const h = it.tx.heardBy;
+      r.status.textContent = h.length ? 'heard by ' + h.map(x => `${x.rx} (${x.rate}/s)`).join(', ')
+                                      : 'not heard by any receiver: powered on? receivers paired to it?';
+    } else {
+      const n = it.node, st = n ? n.state : 'nosignal';
+      r.mark.className = 'dot'; r.mark.style.background = STATE_COLOUR[st] || '#6b7c8f';
+      const tx = n && n.txMac ? (txByMac[n.txMac] ? txByMac[n.txMac].id : n.txMac) : null;
+      r.status.textContent = !n ? 'not connected to this laptop'
+        : (STATE_LABEL[st] || st) + (tx ? ' · listening to ' + tx : '') + ' · ' + n.rate + '/s';
+    }
+    r.status.textContent += placed ? '' : ' · not placed';
+    r.place.textContent = placed ? 'Move' : 'Place';
+    r.place.className = MODE && MODE.kind === 'place' && MODE.id === it.id ? 'active' : '';
+    r.place.onclick = () => placeBoard(it.id, it.role, it.mac);
+    r.del.style.visibility = placed ? 'visible' : 'hidden';
+    r.del.onclick = () => removeBoard(it.id);
+  }
+  for (const key of Object.keys(rows)) if (!seen.has(key)) { rows[key].row.remove(); delete rows[key]; }
+}
+
+function txPosFor(link) {
+  // while a transmitter is being dragged, its links follow it
+  if (DRAG && DRAG.role === 'tx') {
+    const b = PLAN.boards[DRAG.id];
+    if (b && b.x === link.tx[0] && b.y === link.tx[1]) return DRAG.pos;
+  }
+  return link.tx;
+}
+
+function drawPlan() {
+  const m = LAST; if (!m || !PLAN) return;
+  const g = gL, s = scale(), [w, h] = dims();
+  g.clearRect(0, 0, cvL.width, cvL.height);
+  g.fillStyle = '#0b0f14'; g.fillRect(0, 0, cvL.width, cvL.height);
+  if (IMG) { g.drawImage(IMG, PAD, PAD, w * s, h * s); g.fillStyle = 'rgba(11,15,20,0.35)'; g.fillRect(PAD, PAD, w * s, h * s); }
+  else {
+    g.strokeStyle = 'rgba(75,93,112,0.3)'; g.lineWidth = 1;
+    for (let f = 1; f < w; f++) { g.beginPath(); g.moveTo(PAD + f * s, PAD); g.lineTo(PAD + f * s, PAD + h * s); g.stroke(); }
+    for (let f = 1; f < h; f++) { g.beginPath(); g.moveTo(PAD, PAD + f * s); g.lineTo(PAD + w * s, PAD + f * s); g.stroke(); }
+    g.strokeStyle = '#4b5d70'; g.lineWidth = 2; g.strokeRect(PAD, PAD, w * s, h * s);
+    g.fillStyle = '#9fb0c0'; g.font = '12px system-ui'; g.fillText(`${w.toFixed(1)} ft x ${h.toFixed(1)} ft (grid = 1 ft)`, PAD + 6, PAD + h * s - 8);
+  }
+  if (PLAN.plan.walls && PLAN.plan.walls.length) {
+    g.strokeStyle = '#8da2b8'; g.lineWidth = 2;
+    PLAN.plan.walls.forEach(line => {
+      g.beginPath(); line.forEach((p, i) => { const q = toPx(p); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.stroke();
+    });
+  }
+  const loc = m.location, lay = m.layout;
+  if (loc && lay && loc.grid && loc.grid.covered) {  // areas no working link can see: shaded as unknown
+    const {cols, rows: nr, covered} = loc.grid, cw = lay.room[0] * s / cols, ch = lay.room[1] * s / nr;
+    const [ox, oy] = toPx(lay.origin);
+    g.fillStyle = 'rgba(140,150,165,0.18)';
+    covered.forEach((ok, i) => { if (!ok) g.fillRect(ox + (i % cols) * cw, oy + Math.floor(i / cols) * ch, cw + 0.5, ch + 0.5); });
+  }
+  if (loc && lay && loc.moving) {
+    const {cols, rows: nr, cells} = loc.grid, cw = lay.room[0] * s / cols, ch = lay.room[1] * s / nr;
+    const [ox, oy] = toPx(lay.origin);
+    cells.forEach((v, i) => {
+      if (v < 0.15) return;
+      g.fillStyle = `rgba(255,159,28,${(v * 0.7).toFixed(2)})`;
+      g.fillRect(ox + (i % cols) * cw, oy + Math.floor(i / cols) * ch, cw + 0.5, ch + 0.5);
+    });
+  }
+  const nodes = Object.fromEntries(m.nodes.map(n => [n.id, n]));
+  if (lay) lay.links.forEach(l => {
+    const st = nodes[l.rx_id] ? nodes[l.rx_id].state : 'nosignal';
+    const off = loc && loc.excluded ? loc.excluded[l.rx_id] : null;
+    const col = off ? '#6b7c8f' : (STATE_COLOUR[st] || '#6b7c8f');
+    const a = toPx(txPosFor(l)), b = toPx(boardPos(l.rx_id) || l.rx);
+    g.strokeStyle = col; g.lineWidth = !off && st === 'motion' ? 5 : 2;
+    g.setLineDash(!off && (st === 'motion' || st === 'quiet') ? [] : [8, 6]);
+    g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]);
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 4) { g.beginPath(); g.arc(b[0], b[1], 18, 0, 7); g.stroke(); }
+    if (off) { g.fillStyle = '#ffb4a8'; g.font = '12px system-ui'; g.fillText('left out: ' + off, b[0] + 13, b[1] + 18); }
+  });
+  if (loc) loc.trail.forEach((p, i) => {
+    const q = toPx(p); g.fillStyle = `rgba(108,182,255,${(0.1 + 0.6 * i / loc.trail.length).toFixed(2)})`;
+    g.beginPath(); g.arc(q[0], q[1], 4, 0, 7); g.fill();
+  });
+  for (const id of Object.keys(PLAN.boards)) {
+    const b = PLAN.boards[id], q = toPx(boardPos(id));
+    g.lineWidth = 2; g.strokeStyle = '#0b0f14';
+    if (b.role === 'tx') { g.fillStyle = '#e6edf3'; g.fillRect(q[0] - 9, q[1] - 9, 18, 18); g.strokeRect(q[0] - 9, q[1] - 9, 18, 18); }
+    else {
+      const n = nodes[id]; g.fillStyle = STATE_COLOUR[n ? n.state : 'nosignal'] || '#6b7c8f';
+      g.beginPath(); g.arc(q[0], q[1], 10, 0, 7); g.fill(); g.stroke();
+    }
+    const label = id.startsWith('TX@') ? 'TX' : id;
+    g.font = 'bold 13px system-ui';
+    const tw = g.measureText(label).width, lx = q[0] + 13 + tw > cvL.width - 4 ? q[0] - 13 - tw : q[0] + 13;
+    g.lineWidth = 4; g.strokeStyle = '#0b0f14'; g.strokeText(label, lx, q[1] - 10);
+    g.fillStyle = '#ffffff'; g.fillText(label, lx, q[1] - 10);
+  }
+  if (MODE && MODE.kind === 'scale') MODE.pts.forEach(p => {
+    const q = toPx(p); g.fillStyle = '#ffd166'; g.beginPath(); g.arc(q[0], q[1], 6, 0, 7); g.fill();
+  });
+  const badge = document.getElementById('where-badge'), text = document.getElementById('where-text');
+  if (!lay) {
+    badge.textContent = 'PLACE BOARDS'; badge.className = 'badge b-warming';
+    text.textContent = 'place a transmitter and at least one receiver that listens to it';
+  } else if (loc && loc.moving) {
+    const q = toPx([loc.x, loc.y]);
+    g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 2; g.beginPath(); g.arc(q[0], q[1], loc.spread * s, 0, 7); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(q[0], q[1], 9, 0, 7); g.fill();
+    badge.textContent = loc.degraded ? 'MOTION (LESS SURE)' : 'MOTION'; badge.className = 'badge b-motion';
+    text.textContent = `near x ${loc.x.toFixed(1)} ft, y ${loc.y.toFixed(1)} ft (\u00b1${loc.spread.toFixed(1)} ft)` + (loc.note ? '  ' + loc.note : '');
+  } else if (loc && loc.motion_seen) {
+    badge.textContent = 'MOTION (CANNOT PLACE)'; badge.className = 'badge b-motion';
+    text.textContent = loc.note || 'Motion seen, but not enough working links to place it.';
+  } else {
+    if (loc && loc.last) {
+      const q = toPx(loc.last); g.strokeStyle = '#cdd9e5'; g.lineWidth = 2; g.setLineDash([3, 3]);
+      g.beginPath(); g.arc(q[0], q[1], 10, 0, 7); g.stroke(); g.setLineDash([]);
+    }
+    badge.textContent = 'NO MOTION'; badge.className = 'badge b-quiet';
+    text.textContent = loc && loc.last ? 'dashed ring = last place motion was seen. Not moving ≠ not there.' : 'no motion seen yet';
+  }
+}
+
 const es = new EventSource('/events');
 es.onmessage = e => {
   const m = JSON.parse(e.data);
-  document.getElementById('waiting').style.display = m.nodes.length ? 'none' : 'block';
+  LAST = m;
+  const waiting = document.getElementById('waiting');
+  waiting.style.display = m.nodes.length ? 'none' : 'block';
+  if (!m.nodes.length && m.ports) waiting.textContent = m.ports.length
+    ? 'Watching ' + m.ports.join(', ') + ', waiting for receiver data\u2026'
+    : 'No ESP32 plugged in yet. Plug in a receiver; it is picked up automatically.';
   document.getElementById('errors').textContent = Object.entries(m.errors).map(([p, msg]) => `Port ${p}: ${msg}`).join('   ');
   m.nodes.forEach(update);
-  if (m.layout) {
+  if (m.plan) {  // floor plan edited on this page
     document.getElementById('where').style.display = 'block';
+    document.getElementById('room').style.display = 'none';
+    document.getElementById('room-label').style.display = 'none';
+    setPlan(m.plan); updateBoards(m); drawPlan();
+  } else if (m.layout) {  // fixed --layout file: nothing to edit
+    document.getElementById('where').style.display = 'block';
+    document.getElementById('plan-tools').style.display = 'none';
+    document.getElementById('plan-side').style.display = 'none';
     document.getElementById('room').style.display = 'none';
     document.getElementById('room-label').style.display = 'none';
     drawLocation(m.layout, m.location, m.nodes);

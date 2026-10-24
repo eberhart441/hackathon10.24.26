@@ -24,6 +24,22 @@ STILL_S = 8.0       # standing still after a lap
 FAKE_TX = "1a:00:00:00:00:{:02x}"
 
 
+def tx_macs(layout: Layout) -> dict[str, str]:
+    """rx_id -> fake MAC of its transmitter; receivers that share a transmitter position share a MAC."""
+    spots: dict[tuple[float, float], str] = {}
+    return {l.rx_id: spots.setdefault(l.tx, FAKE_TX.format(len(spots) + 1)) for l in layout.links}
+
+
+def seed_plan(layout: Layout, plan) -> None:
+    """Put the simulated boards on an (in-memory) floor plan, so the page has something to show."""
+    plan.set_size(*layout.room)
+    macs = tx_macs(layout)
+    names = {mac: f"SIM-TX{n + 1}" for n, mac in enumerate(dict.fromkeys(macs.values()))}
+    for link in layout.links:
+        plan.place(link.rx_id, "rx", *link.rx)
+        plan.place(names[macs[link.rx_id]], "tx", *link.tx, mac=macs[link.rx_id])
+
+
 def walker_at(layout: Layout, t: float) -> tuple[tuple[float, float] | None, bool]:
     """Position of the walker at time t, and whether they are moving. None = nobody in the room."""
     if t < EMPTY_S:
@@ -45,6 +61,7 @@ def run(layout: Layout, feed, stop: threading.Event, seed: int = 7) -> None:
             for l in links}
     phases = {l.rx_id: [rng.uniform(0, 2 * math.pi) for _ in range(64)] for l in links}
     seq = {l.rx_id: 0 for l in links}
+    macs = tx_macs(layout)
     t0 = time.monotonic()
     next_hb = 0.0
     tick = 1.0 / PPS
@@ -62,12 +79,12 @@ def run(layout: Layout, feed, stop: threading.Event, seed: int = 7) -> None:
                 wobble = 0.35 * w * b * math.sin(2 * math.pi * 1.7 * t + phases[link.rx_id][k])
                 amps.append(max(0, min(255, round(b + wobble + rng.gauss(0, 0.8)))))
             seq[link.rx_id] += 1
-            feed(format_record(CsiRecord(link.rx_id, FAKE_TX.format(i + 1), seq[link.rx_id] & 0xFFFFFFFF,
+            feed(format_record(CsiRecord(link.rx_id, macs[link.rx_id], seq[link.rx_id] & 0xFFFFFFFF,
                                          int(t * 1e6) & 0xFFFFFFFF, -48 - i, 11, tuple(amps))))
         if t >= next_hb:
             next_hb = t + 1.0
             for i, link in enumerate(links):
-                feed(format_record(Heartbeat(link.rx_id, "ROOM1", FAKE_TX.format(i + 1), "sim",
+                feed(format_record(Heartbeat(link.rx_id, "ROOM1", macs[link.rx_id], "sim",
                                              int(t * 1000) & 0xFFFFFFFF, PPS, 150_000, 0, "HUB")))
         k_step += 1
         stop.wait(max(0.0, t0 + k_step * tick - time.monotonic()))

@@ -23,8 +23,18 @@ Point = tuple[float, float]
 def read_dxf_lines(path: Path) -> list[list[Point]]:
     """Every LINE and LWPOLYLINE as a list of points, in the DXF's own units. Closed polylines repeat
     their first point at the end."""
-    raw = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    return read_dxf_text(Path(path).read_text(encoding="utf-8", errors="replace"))[0]
+
+
+def read_dxf_text(text: str) -> tuple[list[list[Point]], int | None]:
+    """Like read_dxf_lines, from the file's text; also returns the drawing's $INSUNITS (None if absent)."""
+    raw = text.splitlines()
     pairs = [(raw[i].strip(), raw[i + 1].strip()) for i in range(0, len(raw) - 1, 2)]
+    units = None
+    for k in range(len(pairs) - 1):
+        if pairs[k] == ("9", "$INSUNITS") and pairs[k + 1][0] == "70":
+            units = int(pairs[k + 1][1])
+            break
     lines: list[list[Point]] = []
     i = 0
     while i < len(pairs):
@@ -56,7 +66,7 @@ def read_dxf_lines(path: Path) -> list[list[Point]]:
             i = j
             continue
         i += 1
-    return lines
+    return lines, units
 
 
 def to_layout(lines: list[list[Point]], origin: Point, units_per_ft: float) -> list[list[Point]]:

@@ -1,6 +1,5 @@
 #include "rs_config.h"
 
-#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,18 +10,12 @@
 
 #define NVS_NAMESPACE "roomsense"
 #define NVS_KEY "cfg"
-#define CFG_MAGIC 0x52534333u    /* "RSC3": bump when the struct layout changes */
-#define CFG_MAGIC_V2 0x52534332u /* "RSC2": same layout without the relay fields at the end */
+#define CFG_MAGIC 0x52534332u /* "RSC2": bump when the struct layout changes */
 
 typedef struct {
     uint32_t magic;
     rs_config_t cfg;
 } stored_t;
-
-#define V2_CFG_SIZE offsetof(rs_config_t, relay_to)
-/* The old struct ended at relay_to's offset, padded to the struct's alignment. */
-#define V2_STORED_SIZE \
-    (offsetof(stored_t, cfg) + ((V2_CFG_SIZE + _Alignof(rs_config_t) - 1) & ~(_Alignof(rs_config_t) - 1)))
 
 const char *rs_role_name(rs_role_t role)
 {
@@ -73,8 +66,7 @@ static bool config_valid(const rs_config_t *c)
            (c->role == RS_ROLE_TX || c->role == RS_ROLE_RX || c->role == RS_ROLE_TAG) && channel_ok(c->channel) &&
            c->pps >= 1 && c->pps <= 200 && rs_valid_name(c->tag_id, RS_TAG_ID_MAX) &&
            memchr(c->tags, '\0', sizeof(c->tags)) != NULL && rs_valid_tag_list(c->tags, RS_MAX_TAGS) &&
-           ((c->peer[0] & 0x01) == 0 || rs_mac_is_broadcast(c->peer)) && (c->paired_tx[0] & 0x01) == 0 &&
-           (c->relay_to[0] & 0x01) == 0 && c->relay_count <= RS_MAX_RELAYS;
+           ((c->peer[0] & 0x01) == 0 || rs_mac_is_broadcast(c->peer)) && (c->paired_tx[0] & 0x01) == 0;
 }
 
 void rs_config_load(rs_config_t *cfg)
@@ -86,18 +78,9 @@ void rs_config_load(rs_config_t *cfg)
     }
     stored_t s;
     size_t len = sizeof(s);
-    if (nvs_get_blob(h, NVS_KEY, &s, &len) == ESP_OK) {
-        if (len == sizeof(s) && s.magic == CFG_MAGIC && config_valid(&s.cfg)) {
-            *cfg = s.cfg;
-        } else if (len == V2_STORED_SIZE && s.magic == CFG_MAGIC_V2) {
-            /* Settings saved by the previous firmware: keep them, relay stays off. */
-            rs_config_t migrated;
-            rs_config_defaults(&migrated);
-            memcpy(&migrated, &s.cfg, V2_CFG_SIZE);
-            if (config_valid(&migrated)) {
-                *cfg = migrated;
-            }
-        }
+    if (nvs_get_blob(h, NVS_KEY, &s, &len) == ESP_OK && len == sizeof(s) && s.magic == CFG_MAGIC &&
+        config_valid(&s.cfg)) {
+        *cfg = s.cfg;
     }
     nvs_close(h);
 }
@@ -224,23 +207,6 @@ bool rs_config_set(rs_config_t *cfg, const char *key, const char *value, const c
             return false;
         }
         strlcpy(cfg->tags, value, sizeof(cfg->tags));
-    } else if (strcmp(key, "relay_to") == 0) {
-        uint8_t mac[6] = {0};
-        if (strcmp(value, "off") != 0 && (!rs_mac_parse(value, mac) || (mac[0] & 0x01) != 0)) {
-            *err = "bad_mac";
-            return false;
-        }
-        memcpy(cfg->relay_to, mac, 6);
-    } else if (strcmp(key, "relays") == 0) {
-        uint8_t macs[RS_MAX_RELAYS][6];
-        int n = rs_mac_list_parse(value, macs, RS_MAX_RELAYS);
-        if (n < 0) {
-            *err = "bad_relays";
-            return false;
-        }
-        memset(cfg->relays, 0, sizeof(cfg->relays));
-        memcpy(cfg->relays, macs, (size_t)n * 6);
-        cfg->relay_count = (uint8_t)n;
     } else if (strcmp(key, "rx_mode") == 0) {
         /* HUB_Mode is the only mode implemented. EDGE and TRAINING need the on-device
          * feature pipeline, which is not built yet. */

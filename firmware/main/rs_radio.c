@@ -31,7 +31,7 @@ esp_err_t rs_radio_start(const rs_config_t *cfg)
     return ESP_OK;
 }
 
-esp_err_t rs_radio_add_peer(const uint8_t mac[6], uint8_t channel, bool fixed_rate, wifi_phy_rate_t rate)
+esp_err_t rs_radio_add_peer(const uint8_t mac[6], uint8_t channel, bool fixed_rate)
 {
     esp_now_peer_info_t peer = {0};
     peer.channel = channel;
@@ -43,13 +43,13 @@ esp_err_t rs_radio_add_peer(const uint8_t mac[6], uint8_t channel, bool fixed_ra
         return err;
     }
     if (fixed_rate) {
-        esp_now_rate_config_t rate_cfg = {
+        esp_now_rate_config_t rate = {
             .phymode = WIFI_PHY_MODE_HT20,
-            .rate = rate,
+            .rate = WIFI_PHY_RATE_MCS0_LGI,
             .ersu = false,
             .dcm = false,
         };
-        err = esp_now_set_peer_rate_config(peer.peer_addr, &rate_cfg);
+        err = esp_now_set_peer_rate_config(peer.peer_addr, &rate);
     }
     return err;
 }

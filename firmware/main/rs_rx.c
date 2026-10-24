@@ -13,7 +13,6 @@
 #include "rs_out.h"
 #include "rs_proto.h"
 #include "rs_radio.h"
-#include "rs_relay.h"
 #include "rs_tag_packet.h"
 #include "rs_util.h"
 
@@ -122,7 +121,7 @@ static void writer_task(void *arg)
         }
         size_t n = rs_fmt_csi(line, sizeof(line), s_cfg->node_id, s_tx_mac_str, item.seq, item.t_us, item.rssi,
                               item.channel, amps, RS_AMP_COUNT);
-        rs_data_write(line, n);
+        rs_out_write(line, n);
     }
 }
 
@@ -225,6 +224,6 @@ void rs_rx_emit_tag_summaries(const rs_config_t *cfg)
         }
         size_t n = rs_fmt_tag(line, sizeof(line), cfg->node_id, cfg->room_id, snapshot[i].id, snapshot[i].heard,
                               snapshot[i].rssi_sum, snapshot[i].rssi_max);
-        rs_data_write(line, n);
+        rs_out_write(line, n);
     }
 }

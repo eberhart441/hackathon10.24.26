@@ -62,7 +62,7 @@ static void tag_task(void *arg)
 void rs_tag_start(const rs_config_t *cfg)
 {
     s_cfg = cfg;
-    ESP_ERROR_CHECK(rs_radio_add_peer(RS_BROADCAST_MAC, cfg->channel, false, WIFI_PHY_RATE_MCS0_LGI));
+    ESP_ERROR_CHECK(rs_radio_add_peer(RS_BROADCAST_MAC, cfg->channel, false));
 #if CONFIG_RS_TAG_LED_GPIO >= 0
     gpio_config_t io = {
         .pin_bit_mask = 1ULL << CONFIG_RS_TAG_LED_GPIO,

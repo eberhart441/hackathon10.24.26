@@ -13,7 +13,6 @@
 #define RS_TAG_ID_MAX 4 /* tag_id: 4 bytes in the tag packet */
 #define RS_TAGS_BUF 64
 #define RS_MAX_TAGS 6
-#define RS_MAX_RELAYS 4
 
 typedef enum {
     RS_ROLE_TX = 0,
@@ -31,10 +30,6 @@ typedef struct {
     uint8_t paired_tx[6]; /* rx: the only transmitter this receiver listens to */
     char tag_id[RS_TAG_ID_MAX + 1]; /* tag: this tag's ID */
     char tags[RS_TAGS_BUF];         /* rx: commissioned tag IDs, comma separated */
-    /* Added in config v3 (appended so older saved settings still load). */
-    uint8_t relay_to[6];                 /* rx: master to relay data to (all zero = off, print on USB) */
-    uint8_t relays[RS_MAX_RELAYS][6];    /* tx: receivers whose relayed data this master prints */
-    uint8_t relay_count;
 } rs_config_t;
 
 const char *rs_role_name(rs_role_t role);

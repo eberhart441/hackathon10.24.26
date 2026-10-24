@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { STATE_FILL, contrast, hue, luminance } from '../src/scene/palette';
 import { ageText } from '../src/scene/format';
 import { validateFloorplan } from '../src/floorplan/validate';
+import { doorViews } from '../src/scene/geometry';
 import { parseMessage } from '../src/ws/parse';
 import { workbox } from '../vite.config';
 import { PLAN } from './arbitraries';
@@ -53,7 +54,7 @@ describe('floor plan validator (Kiro R6.3, R6.4)', () => {
     const bad = structuredClone(PLAN);
     bad.floors[0].rooms[0].doors[0].width = 9;
     bad.nodes[0].room = 'NOPE';
-    bad.floors[1].rooms[0].id = 'R1';
+    bad.floors[0].rooms[1].id = 'R1';
     bad.links.push({ tx: 'RX1', rx: 'TX1' });
     const r = validateFloorplan(bad);
     expect(r.ok).toBe(false);
@@ -62,6 +63,17 @@ describe('floor plan validator (Kiro R6.3, R6.4)', () => {
     expect(text).toMatch(/points to room "NOPE"/);
     expect(text).toMatch(/Room id "R1" is used more than once/);
     expect(text).toMatch(/"RX1" is not an existing TX node/);
+  });
+  it('accepts walls-only DXF walls and leafless doors, and explains bad ones', () => {
+    expect(PLAN.floors[0].walls?.length).toBe(2);
+    expect(PLAN.floors[0].rooms.every((r) => r.doors.every((d) => d.swing === 'none'))).toBe(true);
+    expect(PLAN.floors[0].rooms.flatMap(doorViews)).toEqual([]); // openings only: no door leaves drawn
+    const bad = structuredClone(PLAN);
+    bad.floors[0].walls = [[[0, 0], [1, 1]]];
+    (bad.floors[0].rooms[0].doors[0] as { swing: string }).swing = 'sideways';
+    const text = (validateFloorplan(bad) as { errors: string[] }).errors.join(' | ');
+    expect(text).toMatch(/"walls" entry that is not a list of loops/);
+    expect(text).toMatch(/swing "sideways"/);
   });
   it('never throws on arbitrary JSON', () => {
     fc.assert(fc.property(fc.jsonValue(), (v) => void validateFloorplan(v)), { numRuns: 300 });
@@ -90,11 +102,11 @@ describe('privacy and wording (Kiro R6.7, R9.6, R17)', () => {
     expect(workbox.navigateFallbackDenylist.some((r) => r.test('/ws'))).toBe(true);
   });
 
-  it('only the token key is ever written to localStorage', () => {
+  it('only the token key and the bound tag id are ever written to localStorage', () => {
     const writes = files(SRC, ['.ts', '.tsx'])
       .map((f) => readFileSync(f, 'utf8'))
       .flatMap((s) => [...s.matchAll(/(localStorage|sessionStorage|indexedDB|caches)\.\w+\(([^)]*)\)/g)].map((m) => m[0]));
-    for (const w of writes) expect(w).toMatch(/^localStorage\.(getItem|setItem|removeItem)\(TOKEN_KEY/);
+    for (const w of writes) expect(w).toMatch(/^localStorage\.(getItem|setItem|removeItem)\((TOKEN_KEY|MY_TAG_KEY)/);
   });
 
   it('no user-facing source text contains a banned word', () => {

@@ -13,12 +13,13 @@ Phone-installable responder dashboard plus the FastAPI hub web layer that serves
 | `dashboard/src/render3d/` | three.js renderer (walls, doors, furniture, nodes, link beams, state patterns, HTML labels). |
 | `dashboard/src/render2d/` | SVG renderer; also the alarm-time snapshot inset. |
 | `hub/` | FastAPI web layer: pairing, tokens, laptop-only controls, `/api/floorplan`, WebSocket, static app. |
-| `hub/config/floorplan.json` | The floor plan (meters). Room 101 is generated from the DXF (below); other rooms are hand-edited. Edit and reload the app; no rebuild needed. |
+| `hub/config/floorplan.json` | The floor plan (meters): Room 1, Room 2 and the hallway from `floor plans/walls_only.dxf`. Walls and boards are generated (below); the rooms are hand-edited. `hub/config-two-rooms/floorplan.json` is the same plan. Edit and reload the app; no rebuild needed. |
 | `hub/static/` | Built app, committed so the hub runs without Node. |
 | `tools/mock_hub.py` | Hub with a scripted incident; every message is labeled SIMULATED. |
 | `tools/live_hub.py` | Hub on real receivers (or `--simulate-boards` / `--replay`). |
 | `hub/live_source.py`, `hub/room_engine.py` | Live data: receivers → link states (via `firmware/tools/roomsense_hub`) → room states. |
-| `tools/dxf_to_floorplan.py` | Builds Room 101 in the floor plan from `floor plans/conference_room.dxf`. |
+| `tools/walls_to_floorplan.py` | Puts the walls of `floor plans/walls_only.dxf` and the boards of an rs-view layout into the floor plan. |
+| `tools/dxf_to_floorplan.py` | Older one-room converter for `floor plans/conference_room.dxf` (not used by the current plan). |
 
 ## Run it on the laptop (no phone, no certs)
 
@@ -32,7 +33,7 @@ First-time Python setup: `python -m venv hub/.venv && hub/.venv/Scripts/python -
 
 ## Run it on real boards
 
-Uses the six-board, one-room setup from `firmware/README.md` ("Motion location map"): TX1 and TX2 in opposite corners, RX1–RX4 on the walls. Flash and configure the boards as described there; keep the names **TX1, TX2, RX1–RX4**, because the floor plan matches receivers to Room 101 by name. A board's `room_id` setting doesn't matter (a mismatch is logged once).
+Uses the two-room demo layout (`firmware/tools/layouts/two-rooms.json`): TX1 in the hallway just outside Room 1's door, RX2 and RX3 on Room 1's back wall, RX1 at the far end of the hallway. Room 2 has no sensors and shows UNKNOWN · "No sensors in this room" for the whole incident, so it is still ranked for a search. Keep the names **TX1, RX1–RX3**, because the floor plan matches receivers to rooms by name. A board's `room_id` setting doesn't matter (a mismatch is logged once).
 
 1. Plug the four receivers into the laptop (powered USB hub) and find their ports with `firmware\tools\.venv\Scripts\rs-setup.exe ports`. Close `rs-view` and any serial monitor first; only one program can hold a port.
 2. Start the hub on the receivers:
@@ -40,23 +41,20 @@ Uses the six-board, one-room setup from `firmware/README.md` ("Motion location m
    hub/.venv/Scripts/python tools/live_hub.py --port COM8 --port COM9 --port COM10 --port COM11 --hold-s 60
    ```
    - `--hold-s` is how long a room stays POSSIBLE after motion stops. The spec says 300 s; 60 s keeps a demo moving.
-   - Floor 2 (and Storage) stay SIMULATED and labeled so. Add `--no-sim` to show Room 101 only.
 3. **Leave the room empty for the first ~10 s** so each link learns its quiet level. Until a link has learned it, the room shows UNKNOWN · Uncalibrated.
 4. Open the dashboard as usual (laptop `https://localhost:8443`, phone over the iPhone hotspot) and trigger the alarm.
 
-No boards yet? `tools/live_hub.py --simulate-boards` runs the same pipeline on simulated receivers (a person walking loops around the room), and `--replay firmware/tools/tests/fixtures/sample_capture.log` replays a real capture. Add `--simulate-tag` for a responder tag E1 standing in Room 101.
+No boards yet? `tools/live_hub.py --simulate-boards` runs the same pipeline on simulated receivers (a person walking loops around the room), and `--replay firmware/tools/tests/fixtures/sample_capture.log` replays a real capture. Use `--layout firmware/tools/layouts/two-rooms.json` with `--simulate-boards` to match the floor plan. Add `--simulate-tag` for a responder tag E1 heard by Room 1's receivers.
 
 ### The phone view
 
-The iPhone (any device that isn't the hub laptop) gets a simple responder view; the laptop keeps the full presenter view. Open `https://localhost:8443/?view=phone` on the laptop to see the phone view there.
+The iPhone (any device that isn't the hub laptop) gets the floor plan and nothing else; the laptop keeps the full 3D presenter view. Open `https://localhost:8443/?view=phone&tag=E1` on the laptop to see the phone view there.
 
-- **Header:** recording state, fault count, the disclaimer, and the HUB LOST banner when needed.
-- **Responders:** one line per tag, e.g. "E1 in Room 101 · heard 0:02 ago", "E1 near Room 101 / Storage", or "E1 not heard for 0:40 · last in Room 101".
-- **Floor tabs** with the number of rooms to search and crew on each floor.
-- **2D plan:** room colors and patterns by state, priority badges, the responder marker at the room's crew spot (a room, never a measured position).
-- **Rooms on that floor in search-priority order:** state, confidence, how long in that state, time since motion, and a strip of the last 5 minutes of states. The strip lives in the phone's memory only and is cleared when the incident ends.
+- **Only the rooms:** each room is drawn with its colour and pattern by state and carries its own label inside it: search-priority number, name, state, and one status line ("Motion last seen 0:42 ago", "Still needs a sweep", "No sensors in this room", "Searched", or "STALE — last known …" when the hub is lost). Walls are the DXF's. There are no buttons and no text outside the rooms; fire mode adds a red frame, and simulated data is hatched SIMULATED inside every room.
+- **You are here:** the phone is bound to the responder tag its holder carries (type it on the pairing screen, or open the app once with `?tag=E1`; `?tag=` unbinds). That tag shows as a white **YOU** marker with a pulse at the room's crew spot (a room, never a measured position). At low confidence it shows "YOU · Near Room 1 / Hallway" between the two rooms; a tag not heard for 10 s becomes a hollow marker where it was last heard. Other responders show as their tag ids. The phone's own position is never sensed: no phone radio is sniffed, and GPS cannot resolve rooms indoors, so location comes only from the tag. Tags are located only during an incident, so the marker appears once the alarm is triggered.
+- The plan follows the floor of your tag, else the floor of the first room still to search.
 
-There is nothing to tap except floors. Marking rooms searched and the room sheets stay on the laptop.
+Marking rooms searched and the room sheets stay on the laptop.
 
 **Responder tags:** flash a board with `role=tag tag_id=E1` (see `firmware/README.md`) and add `tags=E1` to every receiver. The hub locates the tag room by room from the receivers' `TAG` lines (`hub/tag_locator.py`, the parent design's algorithm). Low confidence shows "near A / B" or "between rooms", never one room. Tags are tracked only during an incident and forgotten when it ends. With every receiver in one room, the tag can only ever be "in Room 101"; telling rooms apart needs receivers in more than one room.
 
@@ -65,17 +63,18 @@ How a room's state is decided (`hub/room_engine.py`, the parent design's rules o
 - **MOTION:** any link in motion for 2 of the last 3 ticks.
 - **POSSIBLE:** motion stopped less than `--hold-s` ago, or the room hasn't been watched quietly for a full hold yet.
 - **NO DETECTION:** every link healthy and quiet for a full hold. Quiet is never treated as empty.
-- **UNKNOWN:** no usable link (no heartbeat for 10 s, no packets for 2 s, packet rate under 20/s, or a weak or flat signal). Shows the last known state and how long ago; after links come back it stays UNKNOWN for 10 s.
+- **UNKNOWN:** no usable link (no heartbeat for 10 s, no packets for 2 s, packet rate under 20/s, a weak or flat signal, or a receiver the viewer would leave out: losing packets, glitching, or clipping), or no receiver in the room at all. Shows the last known state and how long ago; after links come back it stays UNKNOWN for 10 s.
 - **Confidence is a heuristic** (motion margin × packet-rate quality, capped LOW when a heartbeat is late). It is not a trained model; say so in the demo.
 - Keep other heavy programs closed on the hub laptop. If packets are delayed by more than 2 s, rooms correctly drop to UNKNOWN.
 
-### Update Room 101 from the DXF
+### Update the floor plan from the walls-only DXF
 
 ```powershell
-hub/.venv/Scripts/python tools/dxf_to_floorplan.py "floor plans/conference_room.dxf" --room-id R1 --height 9ft4in --layout firmware/tools/layouts/demo-room.json --write hub/config/floorplan.json
+hub/.venv/Scripts/python tools/walls_to_floorplan.py "floor plans/walls_only.dxf" --layout firmware/tools/layouts/two-rooms.json --layout-origin 0 -4.5 --write hub/config/floorplan.json
+copy hub\config\floorplan.json hub\config-two-rooms\floorplan.json
 ```
 
-The DXF is in inches with the origin at the room's inside bottom-left corner. It draws the room 114 in deep, but the measured room is 112 in (9 ft 4 in), so `--height 9ft4in` corrects it and prints a warning. Board positions come from `demo-room.json` (feet from the top-left corner); measure the real placement and update that file, then rerun.
+The DXF is in inches. Its two wall loops become the floor's `walls` (the dashboard fills the space between them, so wall thickness and door gaps are the drawing's), with the floor origin at the drawing's bottom-left corner. Board positions come from `two-rooms.json` (feet from Room 1's top-left inside corner, which is DXF (0, -4.5)); each board is put in the room whose polygon contains it. The rooms themselves are hand-edited in `floorplan.json`, because a walls-only drawing does not say where a room ends and the hallway begins. `hub/tests/test_walls_to_floorplan.py` checks the committed plan against the DXF.
 
 ## Run it for the iPhone
 

@@ -2,6 +2,10 @@
 // the laptop gets a fresh in-memory token from the hub on every start.
 
 const TOKEN_KEY = 'roomsense.token';
+// The responder tag this phone's holder carries ("You are here", parent Req 26.4). A tag id, set by
+// the holder; never a phone or person identifier, and not incident data.
+const MY_TAG_KEY = 'roomsense.tag';
+const TAG_ID = /^[A-Za-z0-9_-]{1,4}$/; // the firmware's tag_id rule
 
 export class AuthError extends Error {}
 
@@ -64,6 +68,27 @@ export async function ensureToken(): Promise<boolean> {
   laptop = false;
   token = storedToken();
   return !!token;
+}
+
+export function getMyTag(): string | null {
+  const fromUrl = new URLSearchParams(location.search).get('tag');
+  if (fromUrl !== null) setMyTag(fromUrl); // ?tag=E1 binds this phone; ?tag= unbinds it
+  try {
+    const t = localStorage.getItem(MY_TAG_KEY);
+    return t && TAG_ID.test(t) ? t : null;
+  } catch {
+    return TAG_ID.test(fromUrl ?? '') ? fromUrl : null;
+  }
+}
+
+export function setMyTag(tag: string | null) {
+  const t = tag?.trim().toUpperCase() ?? '';
+  try {
+    if (TAG_ID.test(t)) localStorage.setItem(MY_TAG_KEY, t);
+    else localStorage.removeItem(MY_TAG_KEY);
+  } catch {
+    // Private mode: bind again with ?tag= next launch.
+  }
 }
 
 export function forgetToken() {

@@ -18,7 +18,6 @@ import dxf_to_floorplan as d2f  # noqa: E402
 
 DXF = ROOT / "floor plans" / "conference_room.dxf"
 LAYOUT = ROOT / "firmware" / "tools" / "layouts" / "demo-room.json"
-FLOORPLAN = ROOT / "hub" / "config" / "floorplan.json"
 MM = 0.001
 
 
@@ -88,8 +87,27 @@ def test_layout_conversion_matches_room_corners():
     assert {(l["tx"], l["rx"]) for l in links} == {("TX1", "RX1"), ("TX1", "RX2"), ("TX2", "RX3"), ("TX2", "RX4")}
 
 
+# A two-floor plan in the shape the single-room converter was written for (the committed plan is
+# now the walls-only drawing, written by tools/walls_to_floorplan.py).
+TWO_FLOORS = {
+    "schema": 1, "units": "m",
+    "floors": [
+        {"id": "F1", "name": "Floor 1", "rooms": [
+            {"id": "R1", "name": "Old", "simulated": False, "polygon": [[0, 0], [3, 0], [3, 3], [0, 3]],
+             "doors": [], "furniture": [{"kind": "desk", "x": 1, "y": 1, "w": 1, "d": 1}], "crewSlot": [1, 1]},
+            {"id": "R2", "name": "Storage", "simulated": False, "polygon": [[4, 0], [7, 0], [7, 3], [4, 3]],
+             "doors": [], "furniture": [], "crewSlot": [5, 1]}]},
+        {"id": "F2", "name": "Floor 2", "rooms": [
+            {"id": "R3", "name": "Office", "simulated": True, "polygon": [[0, 0], [3, 0], [3, 3], [0, 3]],
+             "doors": [], "furniture": [], "crewSlot": [1, 1]}]},
+    ],
+    "nodes": [{"id": "RX9", "role": "RX", "room": "R2", "pos": [5, 1], "h": 1}],
+    "links": [],
+}
+
+
 def test_update_floorplan_keeps_other_floors_and_validates():
-    plan = json.loads(FLOORPLAN.read_text(encoding="utf-8"))
+    plan = json.loads(json.dumps(TWO_FLOORS))
     conv = d2f.convert_file(DXF, height=d2f.parse_length("9ft4in"), warn=quiet)
     nodes, links = d2f.layout_nodes(json.loads(LAYOUT.read_text(encoding="utf-8")))
     new = d2f.update_floorplan(plan, "R1", conv, nodes, links, "test")

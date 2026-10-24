@@ -36,7 +36,7 @@ class Feed:
     def __init__(self, src: LiveSource):
         self.src, self.t, self.seq, self.rng = src, 1000.0, 0, random.Random(1)
 
-    def run(self, seconds: float, *, moving=(), silent=(), room="ROOM1", pps=100):
+    def run(self, seconds: float, *, moving=(), silent=(), clipped=(), room="ROOM1", pps=100):
         for step in range(int(seconds * 100)):
             self.seq += 1
             for rx in ("RX1", "RX2"):
@@ -46,6 +46,8 @@ class Feed:
                     amps = [self.rng.randint(5, 60) for _ in range(64)]
                 else:
                     amps = [20 + self.rng.randint(0, 1) for _ in range(64)]
+                if rx in clipped:  # a third of the subcarriers stuck at full scale
+                    amps[:22] = [255] * 22
                 self.src.feed_line(format_record(CsiRecord(rx, TX, self.seq, self.seq * 10_000, -45, 11,
                                                            tuple(amps))), self.t)
                 if step % 100 == 0:
@@ -236,3 +238,42 @@ def test_a_plan_without_receivers_is_refused(tmp_path):
     p.write_text(json.dumps({**PLAN, "nodes": [], "links": []}), encoding="utf-8")
     with pytest.raises(ValueError, match="no receiver"):
         LiveSource(p)
+
+
+def test_a_room_with_no_receiver_is_ranked_unknown_for_the_whole_incident(tmp_path):
+    plan = json.loads(json.dumps(PLAN))
+    plan["floors"][0]["rooms"][1].update(id="R3", name="Side room", simulated=False)
+    p = tmp_path / "floorplan.json"
+    p.write_text(json.dumps(plan), encoding="utf-8")
+    src = make(p, with_sim=True)  # nothing is simulated, so nothing comes from the mock
+    feed = Feed(src)
+    feed.run(3)
+    assert feed.frame()["room_states"]["rooms"] == []  # IDLE: no room data at all
+    assert src.room_ids() == {"R1", "R3"}
+    alarm(src, feed)
+    feed.run(2, moving=("RX2",))
+    rs = feed.frame()["room_states"]
+    assert rs["simulated"] is False
+    side = next(r for r in rs["rooms"] if r["room_id"] == "R3")
+    assert (side["state"], side["calibrated"], side["annotation"]) == ("UNKNOWN", False, "no_sensors")
+    assert side["alarm_time_state"] == "UNKNOWN" and side["last_seen"] is None
+    assert rs["ranking"] == ["R1", "R3"]  # MOTION first, then the unwatched room
+    asyncio.run(src.mark_searched("R3"))
+    assert next(r for r in feed.frame()["room_states"]["rooms"] if r["room_id"] == "R3")["searched"] is True
+
+
+def test_a_clipping_receiver_is_not_judged_so_it_cannot_raise_false_motion(plan_path):
+    src = make(plan_path, with_sim=False)
+    feed = Feed(src)
+    feed.run(3)
+    alarm(src, feed)
+    feed.run(3, moving=("RX2",), clipped=("RX2",))
+    f = feed.frame()
+    assert r1(f)["state"] != "MOTION"
+    assert r1(f)["link_health"] == "degraded"
+    rx2 = next(n for n in f["health"]["nodes"] if n["node_id"] == "RX2")
+    assert rx2["status"] == "degraded" and "clipping" in rx2["cause"]
+    # Once clean again (and past the 10 s glitch window the jump back causes), motion is judged.
+    feed.run(11)
+    feed.run(2, moving=("RX2",))
+    assert r1(feed.frame())["state"] == "MOTION"

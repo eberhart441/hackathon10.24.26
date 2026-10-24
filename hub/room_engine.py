@@ -50,12 +50,13 @@ class LinkReading:
     score: float | None  # activity / motion threshold: >= 1 is motion
     hb_age: float | None  # seconds since the last heartbeat; None = never
     pps: int | None  # heartbeat measured_pps
+    fault: str | None = None  # why the viewer would leave this receiver out (glitching, clipping, ...)
 
     def online(self) -> bool:
         return self.hb_age is not None and self.hb_age <= HB_OFFLINE_S
 
     def usable(self) -> bool:
-        return self.online() and self.state in USABLE_STATES and (self.pps or 0) >= PPS_MIN
+        return self.online() and self.state in USABLE_STATES and (self.pps or 0) >= PPS_MIN and self.fault is None
 
     def healthy(self) -> bool:
         return self.usable() and self.hb_age is not None and self.hb_age <= HB_DEGRADED_S
@@ -164,6 +165,13 @@ def presence_pct(track: RoomTrack, usable: list[LinkReading], now: float, hold_s
         extra = min(1.0, max(0.0, quiet - hold_s) / hold_s)
         return int(round(BASELINE_PCT - (BASELINE_PCT - QUIET_PCT) * extra))
     return BASELINE_PCT  # watched, no motion, not yet quiet for the whole hold
+
+
+def unsensed_entry(room_id: str) -> dict[str, Any]:
+    """A plan room with no receiver: UNKNOWN for the whole incident, never quiet (Req 6.5)."""
+    entry = _entry(RoomTrack(room_id), "UNKNOWN", 0, [], calibrated=False)
+    entry.update(annotation="no_sensors", link_health="none")
+    return entry
 
 
 def _entry(track: RoomTrack, state: str, pct: int, readings: list[LinkReading], *, calibrated: bool = True,

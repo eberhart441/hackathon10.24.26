@@ -291,16 +291,16 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - _Requirements: 16.4, 22.2, 22.3_
     - Done when: `npm --prefix dashboard run build` exits 0 and `npm --prefix dashboard run test -- privacy` still reports gzipped JS ≤ 350 KB
 
-- [ ] 11. Fire-mode polish, crew markers, and floor-2 rooms (P4)
-  - [-] 11.1 Implement the fire-mode entry sequence
+- [x] 11. Fire-mode polish, crew markers, and floor-2 rooms (P4)
+  - [x] 11.1 Implement the fire-mode entry sequence
     - Create `dashboard/src/ui/FireEntry.tsx` (red header within one frame, 1 s red flash unless reduced motion, frame Flagged_Rooms within 600 ms via the active renderer, open Priority_List to 3 rows); update `dashboard/src/app.tsx` to mount it on the IDLE → ALARM_ACTIVE transition
     - _Requirements: 13.1, 13.2, 13.3_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [-] 11.2 Implement best-effort Screen Wake Lock
+  - [x] 11.2 Implement best-effort Screen Wake Lock
     - Create `dashboard/src/ui/wakelock.ts`: request on fire entry, re-request on visible, swallow unsupported or rejected requests
     - _Requirements: 13.4_
     - Done when: `npm --prefix dashboard run build` exits 0
-  - [-] 11.3 Implement the snapshot inset (cut 3: toggle variant)
+  - [x] 11.3 Implement the snapshot inset (cut 3: toggle variant)
     - Create `dashboard/src/ui/SnapshotInset.tsx`: 2D mini-plan from `scene.snapshot` labeled "AT ALARM", tap to swap with the live view; a `snapshotMode: "inset" | "toggle"` constant selects the cut-3 "At alarm" toggle variant
     - _Requirements: 13.5, 13.6_
     - Done when: `npm --prefix dashboard run build` exits 0
@@ -353,11 +353,11 @@ All "Done when" commands run from the repository root in PowerShell. The repo pa
     - Done when: `npm --prefix dashboard run e2e -- storage` passes
 
 - [ ] 13. Kiro artifacts, documentation, and committed build (P5)
-  - [ ] 13.1 Write the UI steering file
+  - [-] 13.1 Write the UI steering file
     - Create `.kiro/steering/ui.md` (inclusion: fileMatch on `dashboard/**`): State_Palette with the UNKNOWN deviation note, the state encoding table, Crew_Palette, Banned_Words regex, "Search priority" and "Motion last seen" wording, no person figures, footprints, heatmaps, trails, smoke, or fire, the 56 px rule, and "client never re-ranks"
     - _Requirements: 23.4_
     - Done when: `Select-String -Path .kiro/steering/ui.md -Pattern '56'` and `-Pattern '#6E6596'` both return matches
-  - [ ] 13.2 Author agent hooks
+  - [-] 13.2 Author agent hooks
     - Create `.kiro/hooks/dashboard-props-on-save.json` (PostFileSave matcher `dashboard[\\/]src[\\/].*` → `npm --prefix dashboard run test`), `.kiro/hooks/ui-banned-words.json` (PostFileSave on `dashboard[\\/]src[\\/].*` → a script `tools/scan_ui.py` that fails on Banned_Words in `scene/strings.ts` and MAC-like strings in `dashboard/src` and `hub/config`), `.kiro/hooks/sw-no-runtime-cache.json` (PostFileSave on `vite.config.ts` → `npm --prefix dashboard run build; npm --prefix dashboard run test -- privacy`); create `tools/scan_ui.py`
     - _Requirements: 9.6, 6.7, 17.1_
     - Done when: `python tools/scan_ui.py` exits 0 and `Get-ChildItem .kiro/hooks/*.json | ForEach-Object { Get-Content $_ -Raw | ConvertFrom-Json }` parses all three files

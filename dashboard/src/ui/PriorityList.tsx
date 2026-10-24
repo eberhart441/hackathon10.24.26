@@ -52,10 +52,11 @@ interface Props {
   scene: SceneModel;
   onSelect: (roomId: string) => void;
   onMarkSearched: (roomId: string) => void;
+  initiallyOpen?: boolean;
 }
 
-export function PriorityList({ scene, onSelect, onMarkSearched }: Props) {
-  const [open, setOpen] = useState(false);
+export function PriorityList({ scene, onSelect, onMarkSearched, initiallyOpen = false }: Props) {
+  const [open, setOpen] = useState(initiallyOpen);
   const byId = new Map(scene.rooms.map((r) => [r.roomId, r] as const));
   return (
     <section class={open ? "rs-plist open" : "rs-plist"} aria-label={STRINGS.priorityList}>

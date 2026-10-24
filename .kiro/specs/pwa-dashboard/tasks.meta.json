@@ -491,6 +491,11 @@
         "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
         "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
         "timestamp": 1792876183314
+      },
+      {
+        "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
+        "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
+        "timestamp": 1792876546420
       }
     ],
     "11.2 Implement best-effort Screen Wake Lock": [
@@ -503,6 +508,11 @@
         "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
         "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
         "timestamp": 1792876183572
+      },
+      {
+        "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
+        "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
+        "timestamp": 1792876448595
       }
     ],
     "11.3 Implement the snapshot inset (cut 3: toggle variant)": [
@@ -515,6 +525,11 @@
         "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
         "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
         "timestamp": 1792876183430
+      },
+      {
+        "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
+        "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
+        "timestamp": 1792876448675
       }
     ],
     "13.1 Write the UI steering file": [
@@ -522,6 +537,11 @@
         "executionId": "68567906-c909-464d-a336-6bdb684f4060",
         "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
         "timestamp": 1792864571143
+      },
+      {
+        "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
+        "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
+        "timestamp": 1792876557267
       }
     ],
     "13.2 Author agent hooks": [
@@ -801,6 +821,13 @@
         "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
         "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
         "timestamp": 1792873469497
+      }
+    ],
+    "11. Fire-mode polish, crew markers, and floor-2 rooms (P4)": [
+      {
+        "executionId": "d1c8fcea-63ab-414a-bb59-84344639895f",
+        "chatSessionId": "sess_e55e48e7-f0fa-4895-9396-a4d46e1f71e4",
+        "timestamp": 1792876546530
       }
     ]
   }

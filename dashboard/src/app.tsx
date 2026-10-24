@@ -1,5 +1,5 @@
 // App shell: session → floor plan → WS → Store → Scene_Model → UI (Req 1.1, 1.4, 1.5, 11.7, 14.5).
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { createSession, type Session } from "./auth/session";
 import type { FloorPlan, FloorplanError as FpError } from "./floorplan/types";
 import { loadFloorplan } from "./floorplan/load";
@@ -15,7 +15,10 @@ import { Header } from "./ui/Header";
 import { LaptopControls } from "./ui/LaptopControls";
 import { Pair } from "./ui/Pair";
 import { PriorityList } from "./ui/PriorityList";
+import { FireEntry } from "./ui/FireEntry";
 import { RoomSheet } from "./ui/RoomSheet";
+import { SnapshotInset } from "./ui/SnapshotInset";
+import { startWakeLock } from "./ui/wakelock";
 import { createWsClient } from "./ws/client";
 
 const session = createSession();
@@ -73,6 +76,29 @@ export function App() {
     };
   }, [sess]);
 
+  const state = getState();
+  const scene = plan ? buildSceneModel(plan, state, Date.now(), status) : null;
+  const alarm = scene?.header.alarm === true;
+  const prevAlarm = useRef(false);
+  const releaseWake = useRef<(() => void) | null>(null);
+  const [flashKey, setFlashKey] = useState(0);
+
+  // IDLE → ALARM_ACTIVE entry sequence (Req 13.1–13.4).
+  useEffect(() => {
+    if (alarm && !prevAlarm.current) {
+      setFlashKey((k) => k + 1);
+      const top = scene?.priority[0];
+      const topFloor = top ? scene?.rooms.find((r) => r.roomId === top)?.floorId : null;
+      if (topFloor) setFloorId(topFloor);
+      releaseWake.current = startWakeLock();
+    } else if (!alarm && prevAlarm.current) {
+      releaseWake.current?.();
+      releaseWake.current = null;
+    }
+    prevAlarm.current = alarm;
+  }, [alarm]);
+  useEffect(() => () => releaseWake.current?.(), []);
+
   if (!sess) return <main style={ROOT}><p role="note">{STRINGS.disclaimer}</p></main>;
   if (sess.kind === "needs_pair")
     return (
@@ -83,10 +109,8 @@ export function App() {
       />
     );
   if (planErr) return <FloorplanError errors={planErr} />;
-  if (!plan || !floorId) return <main style={ROOT}><p role="note">{STRINGS.disclaimer}</p></main>;
+  if (!plan || !floorId || !scene) return <main style={ROOT}><p role="note">{STRINGS.disclaimer}</p></main>;
 
-  const state = getState();
-  const scene = buildSceneModel(plan, state, Date.now(), status);
   const fire = scene.mode === "fire";
   const room = selected ? scene.rooms.find((r) => r.roomId === selected) : undefined;
   const entry = selected ? state.roomStates?.rooms.find((r) => r.room_id === selected) : undefined;
@@ -101,10 +125,12 @@ export function App() {
       )}
       {!fire && <p style={{ padding: "0 12px" }}>{STRINGS.idleTitle}</p>}
       <FloorTabs tabs={scene.floorTabs} current={floorId} onSelect={setFloorId} />
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <FloorSvg plan={plan} floorId={floorId} scene={scene} health={state.health} onSelectRoom={setSelected} />
+        <SnapshotInset plan={plan} floorId={floorId} scene={scene} />
       </div>
-      {fire && <PriorityList scene={scene} onSelect={setSelected} onMarkSearched={markSearched} />}
+      {flashKey > 0 && <FireEntry key={flashKey} />}
+      {fire && <PriorityList initiallyOpen scene={scene} onSelect={setSelected} onMarkSearched={markSearched} />}
       {room && <RoomSheet room={room} entry={entry} onClose={() => setSelected(null)} onMarkSearched={markSearched} />}
     </div>
   );

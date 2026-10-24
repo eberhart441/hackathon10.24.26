@@ -1,5 +1,6 @@
 # Beacon
 
+_Last updated: 2026-10-24._
 **WiFi sensing that tells firefighters which rooms to search first.**
 
 Hackachusetts entry, **Civic Action** track (theme V2, *Responsive and resilient communities*). Inside the code the system is called **RoomSense**. You will see that name in the firmware, the Python packages and the specs.

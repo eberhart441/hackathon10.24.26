@@ -163,6 +163,15 @@ class LiveSource(Broadcaster):
 
         self._spawn(run, load_layout(layout_path), self.feed_line, self._stop)
 
+    def add_evacuation_sim(self, data_dir: Path) -> None:
+        """Demo: fake receivers in the simulated rooms replay recorded CSI as an evacuation (hub/evac_sim.py)."""
+        from . import evac_sim
+
+        links = [{"tx": tx, "rx": rx} for tx, rxs in self.plan.tx_receivers.items() for rx in rxs
+                 if self.plan.rx_room.get(rx) in self.plan.simulated]
+        self._spawn(evac_sim.run, self.feed_line, lambda: self._alarm_at, links, self.plan.rx_room,
+                    Path(data_dir), self._stop)
+
     def _spawn(self, target, *args) -> None:
         t = threading.Thread(target=target, args=args, daemon=True)
         self._threads.append(t)
@@ -200,7 +209,9 @@ class LiveSource(Broadcaster):
             self._snapshot = {r: e["state"] for r, e in self._entries.items()}
             if self.with_sim:
                 self._sim_clock = scripted.Clock(now, self.sim_speed)
-                self._snapshot.update(scripted.alarm_snapshot(self._sim_clock))
+                # only rooms the plan marks simulated: a real room may share an id with the script's
+                self._snapshot.update({r: s for r, s in scripted.alarm_snapshot(self._sim_clock).items()
+                                       if r in self.plan.simulated})
             self.publish_frame(now)
         return {"system_state": "ALARM_ACTIVE", "simulated": self.with_sim}
 

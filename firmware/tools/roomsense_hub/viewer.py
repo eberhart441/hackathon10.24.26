@@ -46,6 +46,9 @@ WEAK_RSSI_DBM = -85   # below this the link is too weak to judge
 WEAK_MEAN_AMP = 4.0   # average subcarrier strength below this is basically no signal
 WEAK_ACTIVITY = 0.2   # a real room never wobbles by exactly nothing; flat means blocked or dead
 GLITCH_FRACTION = 0.4 # a packet whose overall strength is this far from typical is counted as a glitch
+BASELINE_LEARN_BELOW = 1.3  # a window only teaches the quiet level if its activity is below 1.3x that level
+BASELINE_FALL = 0.02        # per update toward a calmer level
+BASELINE_RISE = 0.002       # per update toward a busier level: 10x slower
 # A receiver is "obviously off" and left out of the location estimate when any of these hold.
 OFF_MIN_RATE_SHARE = 0.4  # CSI lines/s below this share of the link's recent best rate (was 40 of about 100)
 RATE_PEAK_DECAY = 0.9995  # per 0.1 s tick: the remembered best rate fades over a few minutes
@@ -152,7 +155,12 @@ class NodeView:
             self.state = "motion"
         else:
             self.state = "quiet"
-            self.baseline = 0.98 * self.baseline + 0.02 * activity  # learn only while quiet
+            # Learn only from clearly quiet windows, and rise much more slowly than fall. Otherwise the
+            # pauses of someone moving on and off read as "quiet", the baseline creeps up, and within
+            # a minute their motion becomes the normal level: a trapped person would fade out.
+            if activity < BASELINE_LEARN_BELOW * self.baseline:
+                rate = BASELINE_FALL if activity < self.baseline else BASELINE_RISE
+                self.baseline += rate * (activity - self.baseline)
         return activity, threshold
 
     def off_reason(self, now: float, online: bool, rate: int) -> str | None:

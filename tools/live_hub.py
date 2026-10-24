@@ -42,12 +42,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ml-model", type=Path, default=ROOT / "ml" / "model" / "baseline.json",
                    help="baseline model from 'python -m ml.train', shown as an extra ML line under each room")
     p.add_argument("--no-ml", action="store_true", help="do not show the ML line")
+    p.add_argument("--evac-sim", action="store_true",
+                   help="demo: fill the floor plan's simulated rooms with an evacuation replayed from recorded CSI")
+    p.add_argument("--evac-data", type=Path, default=ROOT / "firmware" / "tools" / "data",
+                   help="recorded sessions for --evac-sim (rs-record output)")
     p.add_argument("--sim-speed", type=float, default=1.0, help="speed of the simulated rooms' timeline")
     p.add_argument("--host", action="append", help="listen address (repeatable); overrides HUB_BIND_HOSTS")
     p.add_argument("--http-port", type=int, help="overrides HUB_PORT")
     args = p.parse_args(argv)
 
-    if not (args.port or args.replay or args.simulate_boards):
+    if not (args.port or args.replay or args.simulate_boards or args.evac_sim):
         p.error("give at least one --port, or --replay, or --simulate-boards")
 
     try:
@@ -65,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         source.add_replay(args.replay)
     if args.simulate_boards:
         source.add_board_simulator(args.layout)
+    if args.evac_sim:
+        source.add_evacuation_sim(args.evac_data)
     if args.simulate_tag:
         source.add_tag_simulator()
 

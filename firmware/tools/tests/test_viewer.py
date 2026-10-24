@@ -245,3 +245,33 @@ def test_a_receiver_that_was_never_plugged_in_is_listed_as_not_connected():
     hub = Hub(Layout((10.0, 10.0), (Link("RX1", (0, 0), (10, 10)), Link("RX9", (10, 0), (0, 10)))))
     m = json.loads(hub.snapshot_json(0.0))
     assert m["location"]["excluded"]["RX9"] == "not connected"
+
+
+
+def _scripted_node(values):
+    """A receiver whose activity follows a script; signal otherwise healthy."""
+    from roomsense_hub.viewer import NodeView
+    node = NodeView("RX1")
+    node.window.extend([tuple([20] * 64)] * 100)
+    node.means.extend([20.0] * 5)  # a healthy signal strength
+    node.rssi = -50
+    it = iter(values)
+    node.activity = lambda: next(it)
+    return node
+
+
+def test_someone_moving_on_and_off_for_minutes_does_not_become_the_quiet_level():
+    """A trapped person moving with short pauses must stay MOTION, not fade into the baseline.
+
+    Shape taken from replayed real CSI: quiet level 1.0; moving windows about 1.2x the threshold;
+    the pauses between movements calmer (1.5) but still well above the true quiet level."""
+    quiet, moving, pause = 1.0, 2.6, 1.5
+    script = [quiet] * 60 + ([moving] * 16 + [pause] * 4) * 18  # 2 updates/s: 30 s calm, then 3 min
+    node = _scripted_node(script)
+    states = []
+    for i in range(len(script)):
+        node.times.append(i * 0.5)
+        node.update_state(i * 0.5)
+        states.append(node.state)
+    last_minute = [st for st, a in zip(states[-120:], script[-120:]) if a == moving]
+    assert last_minute.count("motion") == len(last_minute)

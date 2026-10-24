@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "units": "m",
-  "_notes": "Relay-mode demo: TX1 just outside Room 1 in the hallway, on the laptop's USB as the relay gateway. Room 1 has RX2 and RX3 on its back wall; RX1 stands at the far end of the hallway, so hallway motion shows as its own tile instead of hiding inside a room. Meters, origin bottom-left of Room 1, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position. Board positions are approximate (about a foot); the hallway outline is approximate.",
+  "_notes": "Relay-mode demo: TX1 just outside Room 1 in the hallway, on the laptop's USB as the relay gateway. Room 1 has RX2 and RX3 on its back wall; RX1 stands at the far end of the hallway, so hallway motion shows as its own tile instead of hiding inside a room. Meters, origin bottom-left of Room 1, polygon vertices counter-clockwise. A door sits on polygon edge `edge` (edge i runs from vertex i to vertex i+1), starting `offset` m from vertex i. crewSlot is a fixed stacking spot for crew markers, not a measured position. Board positions are approximate (about a foot); the hallway outline is approximate. Floor 2 is SIMULATED: 12 rooms with fake receivers fed by hub/evac_sim.py (replayed real CSI), for the evacuation demo.",
   "_source": "Rooms from floor plans/walls_only.dxf (inches): two stacked 13 x 9.5 ft rooms with doors on the hallway (left) wall. Hand-entered on 2026-10-24.",
   "floors": [
     {
@@ -13,41 +13,799 @@
           "id": "R1",
           "name": "Room 1",
           "simulated": false,
-          "polygon": [[0, 0], [3.9624, 0], [3.9624, 2.8956], [0, 2.8956]],
-          "doors": [{"edge": 3, "offset": 2.009, "width": 0.813, "swing": "in", "hinge": "end"}],
+          "polygon": [
+            [
+              0,
+              0
+            ],
+            [
+              3.9624,
+              0
+            ],
+            [
+              3.9624,
+              2.8956
+            ],
+            [
+              0,
+              2.8956
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 3,
+              "offset": 2.009,
+              "width": 0.813,
+              "swing": "in",
+              "hinge": "end"
+            }
+          ],
           "furniture": [],
-          "crewSlot": [3.5, 2.5]
+          "crewSlot": [
+            3.5,
+            2.5
+          ]
         },
         {
           "id": "HALL",
           "name": "Hallway",
           "simulated": false,
-          "polygon": [[-2.0, 0], [-0.12, 0], [-0.12, 5.9036], [-2.0, 5.9036]],
+          "polygon": [
+            [
+              -2.0,
+              0
+            ],
+            [
+              -0.12,
+              0
+            ],
+            [
+              -0.12,
+              5.9036
+            ],
+            [
+              -2.0,
+              5.9036
+            ]
+          ],
           "doors": [],
           "furniture": [],
-          "crewSlot": [-1.5, 5.5]
+          "crewSlot": [
+            -1.5,
+            5.5
+          ]
         },
         {
           "id": "R2",
           "name": "Room 2 (no sensors)",
           "simulated": false,
-          "polygon": [[0, 3.008], [3.9624, 3.008], [3.9624, 5.9036], [0, 5.9036]],
-          "doors": [{"edge": 3, "offset": 2.009, "width": 0.813, "swing": "in", "hinge": "end"}],
+          "polygon": [
+            [
+              0,
+              3.008
+            ],
+            [
+              3.9624,
+              3.008
+            ],
+            [
+              3.9624,
+              5.9036
+            ],
+            [
+              0,
+              5.9036
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 3,
+              "offset": 2.009,
+              "width": 0.813,
+              "swing": "in",
+              "hinge": "end"
+            }
+          ],
           "furniture": [],
-          "crewSlot": [3.5, 5.5]
+          "crewSlot": [
+            3.5,
+            5.5
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "name": "Floor 2 (simulated)",
+      "level": 2,
+      "rooms": [
+        {
+          "id": "F2-201",
+          "name": "Room 201",
+          "simulated": true,
+          "polygon": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              3.0,
+              0.0
+            ],
+            [
+              3.0,
+              3.5
+            ],
+            [
+              0.0,
+              3.5
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 2,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            0.4,
+            0.4
+          ]
+        },
+        {
+          "id": "F2-202",
+          "name": "Room 202",
+          "simulated": true,
+          "polygon": [
+            [
+              3.0,
+              0.0
+            ],
+            [
+              6.0,
+              0.0
+            ],
+            [
+              6.0,
+              3.5
+            ],
+            [
+              3.0,
+              3.5
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 2,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            3.4,
+            0.4
+          ]
+        },
+        {
+          "id": "F2-203",
+          "name": "Room 203",
+          "simulated": true,
+          "polygon": [
+            [
+              6.0,
+              0.0
+            ],
+            [
+              9.0,
+              0.0
+            ],
+            [
+              9.0,
+              3.5
+            ],
+            [
+              6.0,
+              3.5
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 2,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            6.4,
+            0.4
+          ]
+        },
+        {
+          "id": "F2-204",
+          "name": "Room 204",
+          "simulated": true,
+          "polygon": [
+            [
+              9.0,
+              0.0
+            ],
+            [
+              12.0,
+              0.0
+            ],
+            [
+              12.0,
+              3.5
+            ],
+            [
+              9.0,
+              3.5
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 2,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            9.4,
+            0.4
+          ]
+        },
+        {
+          "id": "F2-205",
+          "name": "Room 205",
+          "simulated": true,
+          "polygon": [
+            [
+              12.0,
+              0.0
+            ],
+            [
+              15.0,
+              0.0
+            ],
+            [
+              15.0,
+              3.5
+            ],
+            [
+              12.0,
+              3.5
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 2,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            12.4,
+            0.4
+          ]
+        },
+        {
+          "id": "F2-206",
+          "name": "Room 206",
+          "simulated": true,
+          "polygon": [
+            [
+              15.0,
+              0.0
+            ],
+            [
+              18.0,
+              0.0
+            ],
+            [
+              18.0,
+              3.5
+            ],
+            [
+              15.0,
+              3.5
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 2,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            15.4,
+            0.4
+          ]
+        },
+        {
+          "id": "F2-207",
+          "name": "Room 207",
+          "simulated": true,
+          "polygon": [
+            [
+              0.0,
+              5.5
+            ],
+            [
+              3.0,
+              5.5
+            ],
+            [
+              3.0,
+              9.0
+            ],
+            [
+              0.0,
+              9.0
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 0,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            0.4,
+            8.6
+          ]
+        },
+        {
+          "id": "F2-208",
+          "name": "Room 208",
+          "simulated": true,
+          "polygon": [
+            [
+              3.0,
+              5.5
+            ],
+            [
+              6.0,
+              5.5
+            ],
+            [
+              6.0,
+              9.0
+            ],
+            [
+              3.0,
+              9.0
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 0,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            3.4,
+            8.6
+          ]
+        },
+        {
+          "id": "F2-209",
+          "name": "Room 209",
+          "simulated": true,
+          "polygon": [
+            [
+              6.0,
+              5.5
+            ],
+            [
+              9.0,
+              5.5
+            ],
+            [
+              9.0,
+              9.0
+            ],
+            [
+              6.0,
+              9.0
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 0,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            6.4,
+            8.6
+          ]
+        },
+        {
+          "id": "F2-210",
+          "name": "Room 210",
+          "simulated": true,
+          "polygon": [
+            [
+              9.0,
+              5.5
+            ],
+            [
+              12.0,
+              5.5
+            ],
+            [
+              12.0,
+              9.0
+            ],
+            [
+              9.0,
+              9.0
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 0,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            9.4,
+            8.6
+          ]
+        },
+        {
+          "id": "F2-211",
+          "name": "Room 211",
+          "simulated": true,
+          "polygon": [
+            [
+              12.0,
+              5.5
+            ],
+            [
+              15.0,
+              5.5
+            ],
+            [
+              15.0,
+              9.0
+            ],
+            [
+              12.0,
+              9.0
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 0,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            12.4,
+            8.6
+          ]
+        },
+        {
+          "id": "F2-212",
+          "name": "Room 212",
+          "simulated": true,
+          "polygon": [
+            [
+              15.0,
+              5.5
+            ],
+            [
+              18.0,
+              5.5
+            ],
+            [
+              18.0,
+              9.0
+            ],
+            [
+              15.0,
+              9.0
+            ]
+          ],
+          "doors": [
+            {
+              "edge": 0,
+              "offset": 1.05,
+              "width": 0.9,
+              "swing": "in"
+            }
+          ],
+          "furniture": [],
+          "crewSlot": [
+            15.4,
+            8.6
+          ]
         }
       ]
     }
   ],
   "nodes": [
-    {"id": "TX1", "role": "TX", "room": "HALL", "pos": [-0.5, 0.5], "h": 1},
-    {"id": "RX1", "role": "RX", "room": "HALL", "pos": [-1.0, 5.7], "h": 1},
-    {"id": "RX2", "role": "RX", "room": "R1", "pos": [3.87, 2.72], "h": 1},
-    {"id": "RX3", "role": "RX", "room": "R1", "pos": [3.83, 0.12], "h": 1}
+    {
+      "id": "TX1",
+      "role": "TX",
+      "room": "HALL",
+      "pos": [
+        -0.5,
+        0.5
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX1",
+      "role": "RX",
+      "room": "HALL",
+      "pos": [
+        -1.0,
+        5.7
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX2",
+      "role": "RX",
+      "room": "R1",
+      "pos": [
+        3.87,
+        2.72
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX3",
+      "role": "RX",
+      "room": "R1",
+      "pos": [
+        3.83,
+        0.12
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX201",
+      "role": "RX",
+      "room": "F2-201",
+      "pos": [
+        1.5,
+        0.15
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX202",
+      "role": "RX",
+      "room": "F2-202",
+      "pos": [
+        4.5,
+        0.15
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX203",
+      "role": "RX",
+      "room": "F2-203",
+      "pos": [
+        7.5,
+        0.15
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX204",
+      "role": "RX",
+      "room": "F2-204",
+      "pos": [
+        10.5,
+        0.15
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX205",
+      "role": "RX",
+      "room": "F2-205",
+      "pos": [
+        13.5,
+        0.15
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX206",
+      "role": "RX",
+      "room": "F2-206",
+      "pos": [
+        16.5,
+        0.15
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX207",
+      "role": "RX",
+      "room": "F2-207",
+      "pos": [
+        1.5,
+        8.85
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX208",
+      "role": "RX",
+      "room": "F2-208",
+      "pos": [
+        4.5,
+        8.85
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX209",
+      "role": "RX",
+      "room": "F2-209",
+      "pos": [
+        7.5,
+        8.85
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX210",
+      "role": "RX",
+      "room": "F2-210",
+      "pos": [
+        10.5,
+        8.85
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX211",
+      "role": "RX",
+      "room": "F2-211",
+      "pos": [
+        13.5,
+        8.85
+      ],
+      "h": 1
+    },
+    {
+      "id": "RX212",
+      "role": "RX",
+      "room": "F2-212",
+      "pos": [
+        16.5,
+        8.85
+      ],
+      "h": 1
+    },
+    {
+      "id": "TX21",
+      "role": "TX",
+      "room": "F2-201",
+      "pos": [
+        3.0,
+        4.5
+      ],
+      "h": 1
+    },
+    {
+      "id": "TX22",
+      "role": "TX",
+      "room": "F2-203",
+      "pos": [
+        9.0,
+        4.5
+      ],
+      "h": 1
+    },
+    {
+      "id": "TX23",
+      "role": "TX",
+      "room": "F2-205",
+      "pos": [
+        15.0,
+        4.5
+      ],
+      "h": 1
+    }
   ],
   "links": [
-    {"tx": "TX1", "rx": "RX1"},
-    {"tx": "TX1", "rx": "RX2"},
-    {"tx": "TX1", "rx": "RX3"}
+    {
+      "tx": "TX1",
+      "rx": "RX1"
+    },
+    {
+      "tx": "TX1",
+      "rx": "RX2"
+    },
+    {
+      "tx": "TX1",
+      "rx": "RX3"
+    },
+    {
+      "tx": "TX21",
+      "rx": "RX201"
+    },
+    {
+      "tx": "TX21",
+      "rx": "RX207"
+    },
+    {
+      "tx": "TX21",
+      "rx": "RX202"
+    },
+    {
+      "tx": "TX21",
+      "rx": "RX208"
+    },
+    {
+      "tx": "TX22",
+      "rx": "RX203"
+    },
+    {
+      "tx": "TX22",
+      "rx": "RX209"
+    },
+    {
+      "tx": "TX22",
+      "rx": "RX204"
+    },
+    {
+      "tx": "TX22",
+      "rx": "RX210"
+    },
+    {
+      "tx": "TX23",
+      "rx": "RX205"
+    },
+    {
+      "tx": "TX23",
+      "rx": "RX211"
+    },
+    {
+      "tx": "TX23",
+      "rx": "RX206"
+    },
+    {
+      "tx": "TX23",
+      "rx": "RX212"
+    }
   ]
 }
